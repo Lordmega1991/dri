@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 class CardPeriodoWidget extends StatelessWidget {
   final String periodo;
   final List<Map<String, dynamic>> disciplinasPeriodo;
+  final Map<String, List<Map<String, dynamic>>> detalhamento;
   final List<dynamic> alocacoes;
   final double chTotal;
   final double chAlocada;
@@ -12,19 +13,27 @@ class CardPeriodoWidget extends StatelessWidget {
   final VoidCallback onAdicionarDocente;
   final Function(Map<String, dynamic>) onEditarDocente;
   final Function(String) onRemoverAlocacao;
+  final Function(String, String, Map<String, dynamic>)
+      onEditarAlocacaoDetalhada;
+  final Function(String, Map<String, dynamic>) onRemoverAlocacaoDetalhada;
+  final Function(String) onAdicionarAlocacaoDetalhada;
 
   const CardPeriodoWidget({
     super.key,
     required this.periodo,
     required this.disciplinasPeriodo,
-    required this.alocacoes,
+    required this.alocacoes, // Mantido para retrocompatibilidade ou resumo
+    required this.detalhamento, // Novo
     required this.chTotal,
     required this.chAlocada,
     required this.chRestante,
     required this.onAlternarDisciplina,
-    required this.onAdicionarDocente,
-    required this.onEditarDocente,
-    required this.onRemoverAlocacao,
+    required this.onAdicionarDocente, // Depreciado, mas mantido por enquanto
+    required this.onEditarDocente, // Depreciado
+    required this.onRemoverAlocacao, // Depreciado
+    required this.onEditarAlocacaoDetalhada,
+    required this.onRemoverAlocacaoDetalhada,
+    required this.onAdicionarAlocacaoDetalhada,
   });
 
   @override
@@ -61,7 +70,7 @@ class CardPeriodoWidget extends StatelessWidget {
                   children: [
                     _buildResumoCH(),
                     const SizedBox(height: 16),
-                    Expanded(child: _buildContentListsSideBySide()),
+                    Expanded(child: _buildListaUnificada()),
                   ],
                 ),
               ),
@@ -197,248 +206,206 @@ class CardPeriodoWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildContentListsSideBySide() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Coluna de Disciplinas
-        Expanded(
-          flex: 5,
+  Widget _buildListaUnificada() {
+    if (disciplinasPeriodo.isEmpty) {
+      return _buildEmptyState('Nenhuma disciplina neste período');
+    }
+
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: disciplinasPeriodo.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final disc = disciplinasPeriodo[index];
+        final alocacoesDisc = detalhamento[disc['id']] ?? [];
+        final totalAlocado = alocacoesDisc.fold<double>(
+            0, (sum, a) => sum + (a['ch_alocada'] ?? 0));
+        final bool completa = totalAlocado >= (disc['ch_aula'] ?? 0);
+        final bool desabilitada = disc['desabilitada'] == true;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: desabilitada ? const Color(0xFFF8FAFC) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: completa
+                  ? const Color(0xFF10B981).withOpacity(0.3)
+                  : const Color(0xFFE2E8F0),
+            ),
+            boxShadow: desabilitada
+                ? null
+                : [
+                    BoxShadow(
+                      color: const Color(0xFF64748B).withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    )
+                  ],
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader(
-                'Disciplinas',
-                Icons.book_rounded,
-                const Color(0xFF64748B),
-                null,
-              ),
-              const SizedBox(height: 8),
-              Expanded(child: _buildColunaDisciplinas()),
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        // Divisor Vertical
-        Container(width: 1, color: const Color(0xFFF1F5F9)),
-        const SizedBox(width: 16),
-        // Coluna de Docentes
-        Expanded(
-          flex: 4,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionHeader(
-                'Docentes',
-                Icons.people_alt_rounded,
-                const Color(0xFF3B82F6),
-                onAdicionarDocente,
-              ),
-              const SizedBox(height: 8),
-              Expanded(child: _buildColunaDocentes()),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionHeader(
-      String title, IconData icon, Color color, VoidCallback? onAdd) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 6),
-            Text(
-              title.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: color,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
-        ),
-        if (onAdd != null)
-          GestureDetector(
-            onTap: onAdd,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3B82F6).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Icon(Icons.add_rounded,
-                  size: 14, color: Color(0xFF3B82F6)),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildColunaDisciplinas() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-      ),
-      child: disciplinasPeriodo.isEmpty
-          ? _buildEmptyState('Nenhuma disciplina')
-          : Scrollbar(
-              thumbVisibility: true,
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                itemCount: disciplinasPeriodo.length,
-                separatorBuilder: (context, index) =>
-                    const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                itemBuilder: (context, index) {
-                  final disc = disciplinasPeriodo[index];
-                  final bool des = disc['desabilitada'] == true;
-                  return _buildDisciplinaItem(disc, des);
-                },
-              ),
-            ),
-    );
-  }
-
-  Widget _buildDisciplinaItem(Map<String, dynamic> disc, bool des) {
-    return InkWell(
-      onTap: () => onAlternarDisciplina(disc['id']),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                disc['nome_completo'] ?? disc['nome'],
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: des ? FontWeight.w400 : FontWeight.w600,
-                  color:
-                      des ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
-                  decoration: des ? TextDecoration.lineThrough : null,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: des
-                    ? const Color(0xFFF1F5F9)
-                    : const Color(0xFF3B82F6).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                '${disc['ch_aula']}h',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  color:
-                      des ? const Color(0xFF94A3B8) : const Color(0xFF3B82F6),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildColunaDocentes() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-      ),
-      child: alocacoes.isEmpty
-          ? _buildEmptyState('Sem aloc.')
-          : Scrollbar(
-              thumbVisibility: true,
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                itemCount: alocacoes.length,
-                separatorBuilder: (context, index) =>
-                    const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                itemBuilder: (context, index) {
-                  final aloc = alocacoes[index];
-                  return _buildDocenteItem(aloc);
-                },
-              ),
-            ),
-    );
-  }
-
-  Widget _buildDocenteItem(Map<String, dynamic> aloc) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  aloc['docente_nome'],
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1E293B),
+              // Cabeçalho da Disciplina
+              InkWell(
+                onTap: () => onAlternarDisciplina(disc['id']),
+                borderRadius: userInteractionBorderRadius(alocacoesDisc),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: desabilitada
+                              ? const Color(0xFFCBD5E1)
+                              : (completa
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF3B82F6)),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              disc['nome_completo'] ?? disc['nome'],
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: desabilitada
+                                    ? const Color(0xFF94A3B8)
+                                    : const Color(0xFF1E293B),
+                                decoration: desabilitada
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!desabilitada) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: completa
+                                ? const Color(0xFF10B981).withOpacity(0.1)
+                                : const Color(0xFF3B82F6).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${totalAlocado.toInt()} / ${disc['ch_aula']}h',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: completa
+                                  ? const Color(0xFF059669)
+                                  : const Color(0xFF3B82F6),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline_rounded,
+                              size: 20),
+                          color: const Color(0xFF3B82F6),
+                          onPressed: () =>
+                              onAdicionarAlocacaoDetalhada(disc['id']),
+                          tooltip: 'Adicionar Professor',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Text(
-                '${aloc['ch_alocada']}h',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF059669),
+              // Lista de Professores Alocados
+              if (alocacoesDisc.isNotEmpty && !desabilitada)
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(12),
+                      bottomRight: Radius.circular(12),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    children: alocacoesDisc.map((aloc) {
+                      return InkWell(
+                        onTap: () => onEditarAlocacaoDetalhada(
+                            disc['id'], aloc['docente_id'], aloc),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 16),
+                              const Icon(Icons.subdirectory_arrow_right_rounded,
+                                  size: 16, color: Color(0xFF94A3B8)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  aloc['docente_nome'] ?? 'Desconhecido',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF475569),
+                                  ),
+                                ),
+                              ),
+                              if (aloc['dias'] != null &&
+                                  (aloc['dias'] as List).isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Text(
+                                    (aloc['dias'] as List)
+                                        .map(
+                                            (d) => d.toString().substring(0, 3))
+                                        .join(', '),
+                                    style: const TextStyle(
+                                        fontSize: 10, color: Color(0xFF64748B)),
+                                  ),
+                                ),
+                              Text(
+                                '${aloc['ch_alocada']}h',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF475569),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: () => onRemoverAlocacaoDetalhada(
+                                    disc['id'], aloc),
+                                child: const Icon(Icons.close_rounded,
+                                    size: 14, color: Color(0xFFEF4444)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ),
             ],
           ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              _buildActionIconButton(Icons.edit_rounded,
-                  const Color(0xFF64748B), () => onEditarDocente(aloc)),
-              const SizedBox(width: 8),
-              _buildActionIconButton(
-                  Icons.close_rounded,
-                  const Color(0xFFEF4444),
-                  () => onRemoverAlocacao(aloc['docente_id'])),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildActionIconButton(
-      IconData icon, Color color, VoidCallback onTap) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(2.0),
-          child: Icon(icon, size: 12, color: color),
-        ),
-      ),
+  BorderRadius userInteractionBorderRadius(List<dynamic> alocacoes) {
+    if (alocacoes.isEmpty) {
+      return BorderRadius.circular(12);
+    }
+    return const BorderRadius.only(
+      topLeft: Radius.circular(12),
+      topRight: Radius.circular(12),
     );
   }
 
@@ -449,7 +416,7 @@ class CardPeriodoWidget extends StatelessWidget {
         child: Text(
           message,
           style: const TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               color: Color(0xFF94A3B8),
               fontStyle: FontStyle.italic),
         ),

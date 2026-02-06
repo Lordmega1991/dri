@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'widgets/card_periodo_widget.dart';
+import 'widgets/dialog_alocacao_detalhada.dart';
 import 'simulacao_pdf_helper.dart';
 
 class SimulacaoCHPage extends StatefulWidget {
@@ -486,6 +487,13 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
           ],
           const SizedBox(width: 8),
           _buildActionButton(
+            icon: Icons.grid_on_rounded,
+            label: 'Aplicar na Grade',
+            onPressed: _efetivarNaGrade,
+            color: Colors.green,
+          ),
+          const SizedBox(width: 8),
+          _buildActionButton(
             icon: Icons.picture_as_pdf_rounded,
             label: 'PDF',
             onPressed: _exportarParaPDF,
@@ -868,10 +876,23 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
   }
 
   Widget _buildCardPeriodo(String periodo) {
+    final Map<String, dynamic> periodoData = simulacaoAtual[periodo] ?? {};
+    final Map<String, dynamic> rawDetalhamento =
+        periodoData['detalhamento'] ?? {};
+
+    // Converter para o tipo esperado Map<String, List<Map<String, dynamic>>>
+    final Map<String, List<Map<String, dynamic>>> detalhamentoTyped = {};
+    rawDetalhamento.forEach((key, value) {
+      if (value is List) {
+        detalhamentoTyped[key] = List<Map<String, dynamic>>.from(value);
+      }
+    });
+
     return CardPeriodoWidget(
       periodo: periodo,
       disciplinasPeriodo: _getDisciplinasPorPeriodo(periodo),
       alocacoes: simulacaoAtual[periodo]?['alocacoes'] ?? [],
+      detalhamento: detalhamentoTyped,
       chTotal: _getCHTotalDisciplinas(periodo),
       chAlocada: _getCHAlocada(periodo),
       chRestante: _getCHRestante(periodo),
@@ -879,6 +900,13 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
       onAdicionarDocente: () => _mostrarDialogAdicionarDocente(periodo),
       onEditarDocente: (aloc) => _mostrarDialogEditarDocente(periodo, aloc),
       onRemoverAlocacao: (docId) => _removerAlocacao(periodo, docId),
+      onAdicionarAlocacaoDetalhada: (discId) =>
+          _mostrarDialogAlocacaoDetalhada(periodo, discId),
+      onEditarAlocacaoDetalhada: (discId, docenteId, aloc) =>
+          _mostrarDialogAlocacaoDetalhada(periodo, discId,
+              alocacaoExistente: aloc),
+      onRemoverAlocacaoDetalhada: (discId, aloc) =>
+          _removerAlocacaoDetalhada(periodo, discId, aloc),
     );
   }
 
@@ -985,5 +1013,236 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
         );
       },
     );
+  }
+
+  Future<void> _mostrarDialogAlocacaoDetalhada(
+      String periodo, String disciplinaId,
+      {Map<String, dynamic>? alocacaoExistente}) async {
+    final disciplina = disciplinas.firstWhere((d) => d['id'] == disciplinaId);
+
+    final resultado = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => DialogAlocacaoDetalhada(
+        titulo:
+            '${disciplina['nome']} - ${alocacaoExistente == null ? 'Nova Alocação' : 'Editar'}',
+        professores: professores,
+        alocacaoExistente: alocacaoExistente,
+        chPadrao: disciplina['ch_aula']?.toDouble() ?? 0,
+      ),
+    );
+
+    if (resultado != null) {
+      setState(() {
+        if (!simulacaoAtual.containsKey(periodo)) {
+          simulacaoAtual[periodo] = {};
+        }
+
+        final periodoData = simulacaoAtual[periodo]!;
+        final Map<String, dynamic> rawDetalhamento =
+            periodoData['detalhamento'] ?? {};
+
+        // Garante que é um Map mutável do tipo certo para manipulação
+        final detalhamento = Map<String, dynamic>.from(rawDetalhamento);
+
+        if (!detalhamento.containsKey(disciplinaId)) {
+          detalhamento[disciplinaId] = [];
+        }
+
+        List<dynamic> listaAlocacoes =
+            List.from(detalhamento[disciplinaId] ?? []);
+
+        // Adicionar info do professor (nome) para exibição
+        final prof = professores.firstWhere(
+            (p) => p['id'] == resultado['docente_id'],
+            orElse: () => {'apelido': 'Desconhecido'});
+        resultado['docente_nome'] = prof['apelido'];
+
+        if (alocacaoExistente != null) {
+          final index = listaAlocacoes.indexOf(alocacaoExistente);
+          if (index != -1) {
+            listaAlocacoes[index] = resultado;
+          }
+        } else {
+          listaAlocacoes.add(resultado);
+        }
+
+        detalhamento[disciplinaId] = listaAlocacoes;
+        periodoData['detalhamento'] = detalhamento;
+
+        // Sync com alocacoes simples
+        _recalcularAlocacoesPorPeriodo(periodo);
+      });
+    }
+  }
+
+  void _removerAlocacaoDetalhada(
+      String periodo, String disciplinaId, Map<String, dynamic> alocacao) {
+    setState(() {
+      final periodoData = simulacaoAtual[periodo];
+      if (periodoData == null) return;
+
+      final Map<String, dynamic> rawDetalhamento =
+          periodoData['detalhamento'] ?? {};
+      final detalhamento = Map<String, dynamic>.from(rawDetalhamento);
+
+      if (detalhamento.containsKey(disciplinaId)) {
+        List<dynamic> lista = List.from(detalhamento[disciplinaId]);
+        lista.remove(alocacao);
+        detalhamento[disciplinaId] = lista;
+        periodoData['detalhamento'] = detalhamento;
+
+        _recalcularAlocacoesPorPeriodo(periodo);
+      }
+    });
+  }
+
+  void _recalcularAlocacoesPorPeriodo(String periodo) {
+    final periodoData = simulacaoAtual[periodo];
+    if (periodoData == null) return;
+
+    final Map<String, dynamic> rawDetalhamento =
+        periodoData['detalhamento'] ?? {};
+    final Map<String, double> somaPorDocente = {};
+    final Map<String, String> nomesPorDocente = {};
+
+    rawDetalhamento.forEach((discId, listaAlocacoes) {
+      if (listaAlocacoes is List) {
+        for (var aloc in listaAlocacoes) {
+          final docId = aloc['docente_id'];
+          final ch = (aloc['ch_alocada'] ?? 0).toDouble();
+          final nome = aloc['docente_nome'] ?? '';
+
+          if (docId != null) {
+            somaPorDocente[docId] = (somaPorDocente[docId] ?? 0) + ch;
+            nomesPorDocente[docId] = nome;
+          }
+        }
+      }
+    });
+
+    final List<Map<String, dynamic>> novasAlocacoes = [];
+    somaPorDocente.forEach((docId, chTotal) {
+      novasAlocacoes.add({
+        'docente_id': docId,
+        'docente_nome': nomesPorDocente[docId],
+        'ch_alocada': chTotal,
+      });
+    });
+
+    periodoData['alocacoes'] = novasAlocacoes;
+  }
+
+  Future<void> _efetivarNaGrade() async {
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Efetivar Simulação na Grade'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  'Deseja aplicar a simulação "${nomeSimulacaoController.text}" na grade de aulas do semestre $semestreSelecionado?'),
+              const SizedBox(height: 12),
+              const Text(
+                  'ATENÇÃO: Toda a grade atual deste semestre será apagada antes da aplicação.',
+                  style: TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Aplicar e Substituir',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar != true) return;
+
+    try {
+      await supabase
+          .from('grade_aulas')
+          .delete()
+          .eq('semestre', semestreSelecionado);
+
+      final List<Map<String, dynamic>> inserts = [];
+
+      simulacaoAtual.forEach((periodo, periodoData) {
+        final Map<String, dynamic> detalhamento =
+            periodoData['detalhamento'] ?? {};
+
+        detalhamento.forEach((discId, listaAlocacoes) {
+          if (listaAlocacoes is List) {
+            for (var aloc in listaAlocacoes) {
+              final docenteId = aloc['docente_id'];
+              final List<dynamic> slots = aloc['slots'] ?? [];
+
+              for (var slot in slots) {
+                if (slot is String && slot.contains('-')) {
+                  final parts = slot.split('-'); // [Segunda, M1]
+                  if (parts.length >= 2) {
+                    final dia = parts[0];
+                    final timeCode = parts[1]; // M1
+
+                    final turnoLetra = timeCode[0]; // M
+                    final indiceStr = timeCode.substring(1); // 1
+                    final indice = int.tryParse(indiceStr) ?? 0;
+
+                    String turno = 'Manhã';
+                    if (turnoLetra == 'T') turno = 'Tarde';
+                    if (turnoLetra == 'N') turno = 'Noite';
+
+                    int indiceGlobal = indice;
+                    if (turno == 'Tarde') indiceGlobal += 6;
+                    if (turno == 'Noite') indiceGlobal += 12;
+
+                    inserts.add({
+                      'semestre': semestreSelecionado,
+                      'dia': dia,
+                      'turno': turno,
+                      'indice': indiceGlobal,
+                      'disciplina_id': discId,
+                      'professores': [docenteId],
+                    });
+                  }
+                }
+              }
+            }
+          }
+        });
+      });
+
+      if (inserts.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content:
+                  Text('Nenhum horário definido na simulação para exportar.')));
+        }
+        return;
+      }
+
+      await supabase.from('grade_aulas').insert(inserts);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text('Sucesso! ${inserts.length} aulas agendadas na grade.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao efetivar na grade: $e')));
+      }
+    }
   }
 }
