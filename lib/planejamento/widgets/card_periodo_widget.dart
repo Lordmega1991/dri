@@ -61,18 +61,17 @@ class CardPeriodoWidget extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Column(
+          mainAxisSize: MainAxisSize.min, // Wrap content
           children: [
             _buildHeader(isComplete),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    _buildResumoCH(),
-                    const SizedBox(height: 16),
-                    Expanded(child: _buildListaUnificada()),
-                  ],
-                ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  _buildResumoCH(),
+                  const SizedBox(height: 16),
+                  _buildListaUnificada(),
+                ],
               ),
             ),
           ],
@@ -213,6 +212,8 @@ class CardPeriodoWidget extends StatelessWidget {
 
     return ListView.separated(
       padding: EdgeInsets.zero,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: disciplinasPeriodo.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
