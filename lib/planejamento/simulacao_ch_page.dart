@@ -534,9 +534,9 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildControlesModernos(),
+                              _buildControlesModernos(isMobile),
                               const SizedBox(height: 20),
-                              _buildSimulacoesSalvasSection(),
+                              _buildSimulacoesSalvasSection(isMobile),
                               const SizedBox(height: 10),
                             ],
                           ),
@@ -625,33 +625,76 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
     );
   }
 
-  Widget _buildControlesModernos() {
-    return LayoutBuilder(builder: (context, constraints) {
-      final bool isMobile = constraints.maxWidth < 600;
-
-      return Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1E293B).withOpacity(0.06),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(20),
-        child: isMobile
-            ? Column(
-                children: [
-                  _buildTextField(
+  Widget _buildControlesModernos(bool isMobile) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1E293B).withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: isMobile
+          ? Column(
+              children: [
+                _buildTextField(
+                  controller: nomeSimulacaoController,
+                  label: 'Nome da Simulação',
+                  icon: Icons.edit_note_rounded,
+                ),
+                const SizedBox(height: 16),
+                _buildDropdown(
+                  value: semestreSelecionado.isNotEmpty
+                      ? semestreSelecionado
+                      : null,
+                  label: 'Semestre',
+                  icon: Icons.calendar_today_rounded,
+                  items: semestres
+                      .map((s) => DropdownMenuItem<String>(
+                            value: s['display'],
+                            child: Text(s['display']),
+                          ))
+                      .toList(),
+                  onChanged: (v) =>
+                      setState(() => semestreSelecionado = v ?? ''),
+                ),
+                const SizedBox(height: 16),
+                _buildDropdown(
+                  value: tipoPeriodo,
+                  label: 'Tipo de Período',
+                  icon: Icons.layers_rounded,
+                  items: const [
+                    DropdownMenuItem<String>(
+                      value: 'impar',
+                      child: Text('Períodos Ímpares'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'par',
+                      child: Text('Períodos Pares'),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() => tipoPeriodo = v ?? 'impar'),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: _buildTextField(
                     controller: nomeSimulacaoController,
                     label: 'Nome da Simulação',
                     icon: Icons.edit_note_rounded,
                   ),
-                  const SizedBox(height: 16),
-                  _buildDropdown(
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildDropdown(
                     value: semestreSelecionado.isNotEmpty
                         ? semestreSelecionado
                         : null,
@@ -666,8 +709,10 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                     onChanged: (v) =>
                         setState(() => semestreSelecionado = v ?? ''),
                   ),
-                  const SizedBox(height: 16),
-                  _buildDropdown(
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildDropdown(
                     value: tipoPeriodo,
                     label: 'Tipo de Período',
                     icon: Icons.layers_rounded,
@@ -684,60 +729,10 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                     onChanged: (v) =>
                         setState(() => tipoPeriodo = v ?? 'impar'),
                   ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: _buildTextField(
-                      controller: nomeSimulacaoController,
-                      label: 'Nome da Simulação',
-                      icon: Icons.edit_note_rounded,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildDropdown(
-                      value: semestreSelecionado.isNotEmpty
-                          ? semestreSelecionado
-                          : null,
-                      label: 'Semestre',
-                      icon: Icons.calendar_today_rounded,
-                      items: semestres
-                          .map((s) => DropdownMenuItem<String>(
-                                value: s['display'],
-                                child: Text(s['display']),
-                              ))
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => semestreSelecionado = v ?? ''),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildDropdown(
-                      value: tipoPeriodo,
-                      label: 'Tipo de Período',
-                      icon: Icons.layers_rounded,
-                      items: const [
-                        DropdownMenuItem<String>(
-                          value: 'impar',
-                          child: Text('Períodos Ímpares'),
-                        ),
-                        DropdownMenuItem<String>(
-                          value: 'par',
-                          child: Text('Períodos Pares'),
-                        ),
-                      ],
-                      onChanged: (v) =>
-                          setState(() => tipoPeriodo = v ?? 'impar'),
-                    ),
-                  ),
-                ],
-              ),
-      );
-    });
+                ),
+              ],
+            ),
+    );
   }
 
   Widget _buildTextField({
@@ -823,7 +818,7 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
     );
   }
 
-  Widget _buildSimulacoesSalvasSection() {
+  Widget _buildSimulacoesSalvasSection(bool isMobile) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -839,12 +834,15 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
             const Icon(Icons.history_rounded,
                 color: Color(0xFF3B82F6), size: 20),
             const SizedBox(width: 12),
-            const Text(
-              'Simulações Salvas',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B),
+            const Expanded(
+              child: Text(
+                'Simulações Salvas',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E293B),
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -898,36 +896,77 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                       ),
                       subtitle: Text(
                         '${simulacao['semestre']} • ${simulacao['tipo_periodo'] == 'impar' ? 'Ímpares' : 'Pares'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontSize: 11, color: Color(0xFF64748B)),
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded,
-                                size: 18, color: Colors.redAccent),
-                            onPressed: () => _excluirSimulacao(simulacao['id']),
-                          ),
-                          const SizedBox(width: 4),
-                          ElevatedButton(
-                            onPressed: () => _carregarSimulacao(simulacao),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              minimumSize: const Size(80, 32),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6)),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                      trailing: isMobile
+                          ? PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert_rounded,
+                                  size: 20, color: Color(0xFF64748B)),
+                              onSelected: (value) {
+                                if (value == 'excluir') {
+                                  _excluirSimulacao(simulacao['id']);
+                                } else if (value == 'carregar') {
+                                  _carregarSimulacao(simulacao);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'carregar',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.play_arrow_rounded,
+                                          size: 20, color: Color(0xFF0F172A)),
+                                      SizedBox(width: 12),
+                                      Text('Carregar'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'excluir',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete_outline_rounded,
+                                          size: 20, color: Colors.redAccent),
+                                      SizedBox(width: 12),
+                                      Text('Excluir'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded,
+                                      size: 18, color: Colors.redAccent),
+                                  onPressed: () =>
+                                      _excluirSimulacao(simulacao['id']),
+                                ),
+                                const SizedBox(width: 4),
+                                ElevatedButton(
+                                  onPressed: () =>
+                                      _carregarSimulacao(simulacao),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0F172A),
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    minimumSize: const Size(80, 32),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6)),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12),
+                                  ),
+                                  child: const Text('Carregar',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ],
                             ),
-                            child: const Text('Carregar',
-                                style: TextStyle(
-                                    fontSize: 11, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ),
                     ),
                   );
                 },
@@ -1268,11 +1307,15 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
 
       final List<Map<String, dynamic>> inserts = [];
 
-      simulacaoAtual.forEach((periodo, periodoData) {
+      for (var periodoEntry in simulacaoAtual.entries) {
+        final Map<String, dynamic> periodoData = periodoEntry.value;
         final Map<String, dynamic> detalhamento =
             periodoData['detalhamento'] ?? {};
 
-        detalhamento.forEach((discId, listaAlocacoes) {
+        for (var discEntry in detalhamento.entries) {
+          final String discId = discEntry.key;
+          final listaAlocacoes = discEntry.value;
+
           if (listaAlocacoes is List) {
             for (var aloc in listaAlocacoes) {
               final docenteId = aloc['docente_id'];
@@ -1293,15 +1336,11 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                     if (turnoLetra == 'T') turno = 'Tarde';
                     if (turnoLetra == 'N') turno = 'Noite';
 
-                    int indiceGlobal = indice;
-                    if (turno == 'Tarde') indiceGlobal += 6;
-                    if (turno == 'Noite') indiceGlobal += 12;
-
                     inserts.add({
                       'semestre': semestreSelecionado,
                       'dia': dia,
                       'turno': turno,
-                      'indice': indiceGlobal,
+                      'indice': indice,
                       'disciplina_id': discId,
                       'professores': [docenteId],
                     });
@@ -1310,8 +1349,8 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
               }
             }
           }
-        });
-      });
+        }
+      }
 
       if (inserts.isEmpty) {
         if (mounted) {

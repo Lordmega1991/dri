@@ -165,16 +165,12 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
               const SizedBox(height: 20),
 
               // Seleção de Dias GLOBAL (Define quais dias a disciplina acontece)
-              const Text('Grade Horária da Disciplina (Selecione slots)',
+              const Text('Dias da Semana',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const Text(
-                  'Marque abaixo os dias e horários que a disciplina é ofertada.\nEm seguida, ajuste (acima) quais docentes assumem quais dias.',
+              const Text('Selecione os dias em que a disciplina é ofertada.',
                   style: TextStyle(fontSize: 11, color: Colors.grey)),
 
               const SizedBox(height: 12),
-
-              const Text('Dias da Semana (Habilita colunas)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               Wrap(
                 spacing: 8,
                 children: diasSemana.map((dia) {
@@ -372,13 +368,16 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
     for (int i = 1; i <= qtd; i++) {
       rows.add(TableRow(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            color: _getCorTurno(labelTurno).withOpacity(0.1),
-            child: Text('$prefixo$i',
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          TableCell(
+            verticalAlignment: TableCellVerticalAlignment.middle,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              color: _getCorTurno(labelTurno).withOpacity(0.1),
+              child: Text('$prefixo$i',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.bold)),
+            ),
           ),
           ...diasSemana.map((dia) {
             final key = '$dia-$prefixo$i';
@@ -469,7 +468,7 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
 
       // Slots deste professor: Slots Globais que pertencem aos Dias Ativos do Professor
       final slotsAtivosProf = slotsAtivosGlobais.where((slot) {
-        final diaDoSlot = slot.split('-')[0]; // "Segunda-M1" -> "Segunda"
+        final diaDoSlot = slot.split('-')[0]; // "Segunda" etc
         return diasAtivosProf.contains(diaDoSlot);
       }).toList();
 

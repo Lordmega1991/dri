@@ -52,9 +52,9 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
   List<Map<String, dynamic>> atividadesAdministrativas = [];
   List<Map<String, dynamic>> semestres = [];
   String semestreAtual = '';
-  Map<String, int> cargaHorariaProfessores = {};
+  Map<String, num> cargaHorariaProfessores = {};
   // OTIMIZAÇÃO: Cache da lista ordenada para a sidebar
-  List<MapEntry<String, int>> _professoresOrdenados = [];
+  List<MapEntry<String, num>> _professoresOrdenados = [];
   Map<String, List<Map<String, dynamic>>> detalhesProfessores = {};
   Map<String, List<Map<String, dynamic>>> horariosProfessores = {};
 
@@ -357,7 +357,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
       final professoresMap = {for (var p in professores) p['id'].toString(): p};
 
       Map<String, List<Map<String, dynamic>>> temp = {};
-      Map<String, int> cargaHorariaTemp = {};
+      Map<String, num> cargaHorariaTemp = {};
       Map<String, List<Map<String, dynamic>>> detalhesTemp = {};
       Map<String, List<Map<String, dynamic>>> horariosTemp = {};
 
@@ -427,7 +427,8 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
             nomesProfessores.add(nomeProfessor);
 
             final cargaAtual = cargaHorariaTemp[nomeProfessor] ?? 0;
-            cargaHorariaTemp[nomeProfessor] = cargaAtual + 1;
+            final double pesoSlot = 1.0 / professoresIds.length;
+            cargaHorariaTemp[nomeProfessor] = cargaAtual + pesoSlot;
 
             if (!detalhesTemp.containsKey(nomeProfessor)) {
               detalhesTemp[nomeProfessor] = [];
@@ -443,7 +444,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                 'tipo': 'disciplina',
                 'nome': disciplinaNome,
                 'nome_extenso': disciplinaNomeExtenso,
-                'carga_horaria': 1,
+                'carga_horaria': pesoSlot,
                 'semestre': semestre,
                 'periodo': periodo,
                 'turno': turnoDisc,
@@ -454,8 +455,8 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                   detalhesTemp[nomeProfessor]!.indexOf(disciplinaExistente);
               detalhesTemp[nomeProfessor]![index]['carga_horaria'] =
                   (detalhesTemp[nomeProfessor]![index]['carga_horaria']
-                          as int) +
-                      1;
+                          as num) +
+                      pesoSlot;
             }
 
             // Adiciona horário ao professor
@@ -493,7 +494,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
       }
 
       // Combina carga horária
-      Map<String, int> cargaHorariaCompleta = {};
+      Map<String, num> cargaHorariaCompleta = {};
       Map<String, List<Map<String, dynamic>>> detalhesCompletos = {};
 
       cargaHorariaAtividades.forEach((nomeProfessor, cargaAtividades) {
@@ -2069,7 +2070,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    '$ch h',
+                                    '${ch.toStringAsFixed(1)} h',
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: isDisciplina
@@ -2133,7 +2134,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                         Border.all(color: Colors.blue.shade100),
                                   ),
                                   child: Text(
-                                    '${cargaHoraria}h',
+                                    '${cargaHoraria.toStringAsFixed(1)}h',
                                     style: TextStyle(
                                       color: Colors.blue.shade700,
                                       fontWeight: FontWeight.bold,

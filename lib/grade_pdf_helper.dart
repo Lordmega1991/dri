@@ -19,7 +19,7 @@ class GradePDFHelper {
 
   static Future<void> gerarPDFDetalhado({
     required Map<String, List<Map<String, dynamic>>> grade,
-    required Map<String, int> cargaHorariaProfessores,
+    required Map<String, num> cargaHorariaProfessores,
     required Map<String, List<Map<String, dynamic>>> detalhesProfessores,
     required Map<String, List<Map<String, dynamic>>> horariosProfessores,
     required List<String> diasSemana,
@@ -111,7 +111,8 @@ class GradePDFHelper {
                                   color: primaryBlue,
                                   borderRadius: pw.BorderRadius.circular(10),
                                 ),
-                                child: pw.Text('TOTAL: $cargaHoraria H',
+                                child: pw.Text(
+                                    'TOTAL: ${cargaHoraria.toStringAsFixed(1)} H',
                                     style: pw.TextStyle(
                                         fontSize: 9,
                                         color: PdfColors.white,
@@ -147,8 +148,8 @@ class GradePDFHelper {
                                       final ch = detalhe['carga_horaria'] ?? 0;
 
                                       String infoAtividade = isDisciplina
-                                          ? '$nome - $nomeExtenso ($ch h)'
-                                          : '$nome ($ch h)';
+                                          ? '$nome - $nomeExtenso (${(ch as num).toStringAsFixed(1)} h)'
+                                          : '$nome (${(ch as num).toStringAsFixed(1)} h)';
 
                                       return pw.Padding(
                                         padding:
@@ -383,7 +384,7 @@ class GradePDFHelper {
 
   static pw.Widget _buildResumoGeralPDF(
       Map<String, List<Map<String, dynamic>>> grade,
-      Map<String, int> cargaHorariaProfessores) {
+      Map<String, num> cargaHorariaProfessores) {
     final totalAulas =
         grade.values.fold<int>(0, (total, aulas) => total + aulas.length);
     final totalProfessores = cargaHorariaProfessores.length;

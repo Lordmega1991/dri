@@ -287,25 +287,30 @@ class CardPeriodoWidget extends StatelessWidget {
                         ),
                       ),
                       if (!desabilitada) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: completa
-                                ? const Color(0xFF10B981).withOpacity(0.1)
-                                : const Color(0xFF3B82F6).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${totalAlocado.toInt()} / ${disc['ch_aula']}h',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: completa
-                                  ? const Color(0xFF059669)
-                                  : const Color(0xFF3B82F6),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: completa
+                                    ? const Color(0xFF10B981).withOpacity(0.1)
+                                    : const Color(0xFF3B82F6).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${totalAlocado.toInt()} / ${disc['ch_aula']}h',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: completa
+                                      ? const Color(0xFF059669)
+                                      : const Color(0xFF3B82F6),
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                         const SizedBox(width: 8),
                         IconButton(
@@ -358,13 +363,14 @@ class CardPeriodoWidget extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (aloc['slots'] != null &&
-                                  (aloc['slots'] as List).isNotEmpty)
+                              if ((aloc['slots'] != null &&
+                                      (aloc['slots'] as List).isNotEmpty) ||
+                                  (aloc['dias'] != null &&
+                                      (aloc['dias'] as List).isNotEmpty))
                                 Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: Text(
-                                    _formatDisplaySlots(
-                                        List<String>.from(aloc['slots'] ?? [])),
+                                    _formatDisplayHorarios(aloc),
                                     style: const TextStyle(
                                         fontSize: 10, color: Color(0xFF64748B)),
                                   ),
@@ -396,6 +402,29 @@ class CardPeriodoWidget extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _formatDisplayHorarios(Map<String, dynamic> aloc) {
+    if (aloc['slots'] != null && (aloc['slots'] as List).isNotEmpty) {
+      return _formatDisplaySlots(List<String>.from(aloc['slots']));
+    }
+
+    final List<dynamic> dias = aloc['dias'] ?? [];
+    if (dias.isEmpty) return '';
+
+    final String turno = aloc['turno'] ?? '';
+    final List<String> diasAbrev = dias.map((d) {
+      final s = d.toString();
+      if (s == 'Segunda') return '2º';
+      if (s == 'Terça') return '3º';
+      if (s == 'Quarta') return '4º';
+      if (s == 'Quinta') return '5º';
+      if (s == 'Sexta') return '6º';
+      if (s == 'Sábado') return 'Sáb';
+      return s.substring(0, 1);
+    }).toList();
+
+    return '${diasAbrev.join(', ')} $turno';
   }
 
   String _formatDisplaySlots(List<String> slots) {
