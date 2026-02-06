@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "dri-ufpb",
+    "driufpb": "dri-ufpb"
+  },
+  "targets": {},
+  "etags": {}
+}
