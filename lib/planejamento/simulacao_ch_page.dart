@@ -583,7 +583,7 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                     elevation: 0,
                     toolbarHeight: 0,
                     bottom: PreferredSize(
-                      preferredSize: const Size.fromHeight(48),
+                      preferredSize: const Size.fromHeight(50),
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(horizontal: 24),
