@@ -1586,7 +1586,15 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
   }
 
   String _getHorarioCompleto(String turno, int indice) {
-    return horariosPorTurno[turno]?[indice - 1] ?? '';
+    // Garante que o índice seja o relativo ao turno (1..6 ou 1..4)
+    final indiceRelativo = _getIndiceNoTurno(indice);
+
+    final horarios = horariosPorTurno[turno];
+    if (horarios == null) return '';
+
+    if (indiceRelativo < 1 || indiceRelativo > horarios.length) return '';
+
+    return horarios[indiceRelativo - 1];
   }
 
   String _getTurnoDoHorario(int indice) {

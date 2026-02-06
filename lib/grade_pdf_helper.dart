@@ -49,7 +49,7 @@ class GradePDFHelper {
               _buildResumoGeralPDF(grade, cargaHorariaProfessores),
               pw.SizedBox(height: 15),
               _buildGradePDFCompleta(grade, diasSemana, getTurnoDoHorario,
-                  getIndiceNoTurno, getHorarioFormatado),
+                  getIndiceNoTurno, getHorarioFormatado, detalhesProfessores),
             ],
           );
         },
@@ -419,7 +419,8 @@ class GradePDFHelper {
       List<String> diasSemana,
       String Function(int) getTurnoDoHorario,
       Function(int) getIndiceNoTurno,
-      Function(int) getHorarioFormatado) {
+      Function(int) getHorarioFormatado,
+      Map<String, List<Map<String, dynamic>>> detalhesProfessores) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
       columnWidths: {
@@ -487,7 +488,8 @@ class GradePDFHelper {
                 return pw.Container(
                   padding: const pw.EdgeInsets.all(3),
                   constraints: const pw.BoxConstraints(minHeight: 35),
-                  child: _buildCelulaGradeModern(aulas),
+                  child: _buildCelulaGradeModern(
+                      aulas, detalhesProfessores), // Pass detalhesProfessores
                 );
               }),
             ],
@@ -497,15 +499,38 @@ class GradePDFHelper {
     );
   }
 
-  static pw.Widget _buildCelulaGradeModern(List<Map<String, dynamic>> aulas) {
+  static pw.Widget _buildCelulaGradeModern(List<Map<String, dynamic>> aulas,
+      Map<String, List<Map<String, dynamic>>> detalhesProfessores) {
     if (aulas.isEmpty) return pw.SizedBox();
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: aulas.map((aula) {
         final disciplinaNome = aula['disciplina_nome'] ?? '';
-        final professores = (aula['professores_nomes'] as List).join(', ');
+        final professoresLista = (aula['professores_nomes'] as List? ?? []);
         final sigla = getSiglaDisciplina(disciplinaNome);
+
+        // Constrói string dos professores com CH
+        List<String> professoresComCH = [];
+        for (var profName in professoresLista) {
+          String display = profName.toString();
+
+          // Tentar encontrar a CH deste professor para esta disciplina
+          if (detalhesProfessores.containsKey(display)) {
+            final detalhes = detalhesProfessores[display] ?? [];
+            final detalheDisc = detalhes.firstWhere(
+              (d) => d['tipo'] == 'disciplina' && d['nome'] == disciplinaNome,
+              orElse: () => {},
+            );
+            if (detalheDisc.isNotEmpty) {
+              final ch = detalheDisc['carga_horaria'] ?? 0;
+              display += ' (${ch}h)';
+            }
+          }
+          professoresComCH.add(display);
+        }
+
+        final professoresStr = professoresComCH.join(', ');
 
         return pw.Container(
           margin: const pw.EdgeInsets.only(bottom: 2),
@@ -524,7 +549,7 @@ class GradePDFHelper {
                     style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold, color: primaryBlue)),
                 pw.TextSpan(
-                    text: '\n$professores',
+                    text: '\n$professoresStr',
                     style: const pw.TextStyle(color: textMain, fontSize: 5.5)),
               ],
             ),
