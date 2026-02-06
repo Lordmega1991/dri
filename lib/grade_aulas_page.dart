@@ -1749,17 +1749,42 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                         scrollDirection: Axis.vertical,
                         child: Column(
                           children: [
-                              Container(
-                                height: 60,
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 120,
+                            Container(
+                              height: 60,
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 120,
+                                    height: 60,
+                                    margin: const EdgeInsets.all(4),
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.indigo.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.05),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      'HORÁRIO',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.indigo.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                  ...diasSemana.map((dia) {
+                                    return Container(
+                                      width: cellWidth,
                                       height: 60,
                                       margin: const EdgeInsets.all(4),
                                       alignment: Alignment.center,
                                       decoration: BoxDecoration(
-                                        color: Colors.indigo.shade50,
+                                        color: Colors.blue.shade50,
                                         borderRadius: BorderRadius.circular(12),
                                         boxShadow: [
                                           BoxShadow(
@@ -1771,189 +1796,159 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                         ],
                                       ),
                                       child: Text(
-                                        'HORÁRIO',
+                                        dia,
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.indigo.shade900,
+                                          fontSize: 16,
+                                          color: Colors.blue.shade900,
                                         ),
                                       ),
-                                    ),
-                                    ...diasSemana.map((dia) {
+                                    );
+                                  }),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Column(
+                                  children: [
+                                    ...List.generate(totalHorarios, (i) {
+                                      final indice = i + 1;
+                                      final turno = _getTurnoDoHorario(indice);
+                                      final horario =
+                                          _getHorarioFormatado(indice);
+
                                       return Container(
-                                        width: cellWidth,
-                                        height: 60,
+                                        width: 120,
+                                        height: cellHeight,
                                         margin: const EdgeInsets.all(4),
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
-                                          color: Colors.blue.shade50,
+                                          color: Colors.white,
                                           borderRadius:
                                               BorderRadius.circular(12),
                                           boxShadow: [
                                             BoxShadow(
                                               color: Colors.black
-                                                  .withOpacity(0.05),
-                                              blurRadius: 4,
-                                              offset: const Offset(0, 2),
+                                                  .withOpacity(0.03),
+                                              blurRadius: 3,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ],
+                                          border: Border.all(
+                                              color: Colors.grey.shade200),
+                                        ),
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              '$indice',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.grey.shade800,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              horario,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: _getTurnoColor(turno)
+                                                    .withOpacity(0.5),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                turno,
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  color: Colors.grey.shade800,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ),
-                                        child: Text(
-                                          dia,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                            color: Colors.blue.shade900,
-                                          ),
-                                        ),
                                       );
-                                   }),
+                                    }),
                                   ],
                                 ),
-                              ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Column(
+                                ...diasSemana.map((dia) {
+                                  return Column(
                                     children: [
                                       ...List.generate(totalHorarios, (i) {
                                         final indice = i + 1;
                                         final turno =
                                             _getTurnoDoHorario(indice);
-                                        final horario =
-                                            _getHorarioFormatado(indice);
+                                        final key =
+                                            '$dia-$turno-${_getIndiceNoTurno(indice)}';
+                                        final aulas = grade[key] ?? [];
 
-                                        return Container(
-                                          width: 120,
-                                          height: cellHeight,
-                                          margin: const EdgeInsets.all(4),
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withOpacity(0.03),
-                                                blurRadius: 3,
-                                                offset: const Offset(0, 1),
-                                              ),
-                                            ],
-                                            border: Border.all(
-                                                color: Colors.grey.shade200),
-                                          ),
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                '$indice',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.grey.shade800,
+                                        return GestureDetector(
+                                          onTap: () => _onHorarioTap(dia, turno,
+                                              _getIndiceNoTurno(indice)),
+                                          child: MouseRegion(
+                                            cursor: SystemMouseCursors.click,
+                                            child: Container(
+                                              width: cellWidth,
+                                              height: cellHeight,
+                                              margin: const EdgeInsets.all(4),
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: aulas.isEmpty
+                                                    ? Colors.white
+                                                    : _getTurnoColor(turno)
+                                                        .withOpacity(0.3),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: aulas.isEmpty
+                                                      ? Colors.grey.shade200
+                                                      : _getTurnoColor(turno)
+                                                          .withOpacity(0.6),
+                                                  width: 1,
                                                 ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                horario,
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey.shade600,
-                                                ),
-                                                textAlign: TextAlign.center,
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: _getTurnoColor(turno)
-                                                      .withOpacity(0.5),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Text(
-                                                  turno,
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    color: Colors.grey.shade800,
-                                                    fontWeight: FontWeight.bold,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withOpacity(0.03),
+                                                    blurRadius: 3,
+                                                    offset: const Offset(0, 1),
                                                   ),
-                                                ),
+                                                ],
                                               ),
-                                            ],
+                                              child: _buildAulaContent(aulas),
+                                            ),
                                           ),
                                         );
                                       }),
                                     ],
-                                  ),
-                                  ...diasSemana.map((dia) {
-                                    return Column(
-                                      children: [
-                                        ...List.generate(totalHorarios, (i) {
-                                          final indice = i + 1;
-                                          final turno =
-                                              _getTurnoDoHorario(indice);
-                                          final key =
-                                              '$dia-$turno-${_getIndiceNoTurno(indice)}';
-                                          final aulas = grade[key] ?? [];
-
-                                          return GestureDetector(
-                                            onTap: () => _onHorarioTap(
-                                                dia,
-                                                turno,
-                                                _getIndiceNoTurno(indice)),
-                                            child: MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: Container(
-                                                width: cellWidth,
-                                                height: cellHeight,
-                                                margin: const EdgeInsets.all(4),
-                                                padding:
-                                                    const EdgeInsets.all(4),
-                                                decoration: BoxDecoration(
-                                                  color: aulas.isEmpty
-                                                      ? Colors.white
-                                                      : _getTurnoColor(turno)
-                                                          .withOpacity(0.3),
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                  border: Border.all(
-                                                    color: aulas.isEmpty
-                                                        ? Colors.grey.shade200
-                                                        : _getTurnoColor(turno)
-                                                            .withOpacity(0.6),
-                                                    width: 1,
-                                                  ),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.black
-                                                          .withOpacity(0.03),
-                                                      blurRadius: 3,
-                                                      offset:
-                                                          const Offset(0, 1),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: _buildAulaContent(aulas),
-                                              ),
-                                            ),
-                                          );
-                                        }),
-                                      ],
-                                    );
-                                  }).toList(),
-                                ],
-                              ),
+                                  );
+                                }).toList(),
+                              ],
                             ),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
+              ),
+            ),
       floatingActionButton: _usuarioPodeEditar()
           ? FloatingActionButton(
               onPressed: _limparTodaGrade,
