@@ -83,12 +83,22 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
   }
 
   void _adicionarItem() {
-    // Sugestão de CH: o que falta para completar o disponível, dividido pelo número de itens?
-    // Simplificando: Deixa vazio ou com zero.
+    // Inicializa dias selecionados para o novo item
+    // Se houver seleção global/anterior, poderiamos copiar?
+    // Por padrão vamos deixar todos marcados ou desmarcados?
+    // Melhor marcar todos que estão no global?
+    // Vamos iniciar com todos marcados para facilitar (assumindo compartilhamento),
+    // e o usuário desmarca se quiser dividir.
+    Map<String, bool> diasItem = {};
+    for (var dia in diasSemana) {
+      diasItem[dia] = true;
+    }
+
     itensAlocacao.add({
       'docente_id': null,
       'ch': '',
       'controller': TextEditingController(),
+      'dias': diasItem,
     });
     setState(() {});
   }
@@ -118,7 +128,7 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
       title: Text(widget.titulo,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       content: Container(
-        width: 600,
+        width: 700, // Aumentado para caber os dias
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -154,10 +164,17 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
 
               const SizedBox(height: 20),
 
-              // Seleção de Dias
-              const Text('Dias da Semana',
+              // Seleção de Dias GLOBAL (Define quais dias a disciplina acontece)
+              const Text('Grade Horária da Disciplina (Selecione slots)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 8),
+              const Text(
+                  'Marque abaixo os dias e horários que a disciplina é ofertada.\nEm seguida, ajuste (acima) quais docentes assumem quais dias.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey)),
+
+              const SizedBox(height: 12),
+
+              const Text('Dias da Semana (Habilita colunas)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               Wrap(
                 spacing: 8,
                 children: diasSemana.map((dia) {
@@ -175,17 +192,7 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
                 }).toList(),
               ),
 
-              const SizedBox(height: 20),
-
-              // Seleção de Horários (Grid)
-              const Text('Horários Específicos (Grade)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 4),
-              const Text(
-                  'Selecione os horários exatos para preencher a grade automaticamente.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey)),
               const SizedBox(height: 12),
-
               _buildGridHorarios(),
             ],
           ),
@@ -208,54 +215,118 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
     return Column(
       children: List.generate(itensAlocacao.length, (index) {
         final item = itensAlocacao[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: DropdownButtonFormField<String>(
-                  value: item['docente_id'],
-                  decoration: const InputDecoration(
-                    labelText: 'Docente',
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                  ),
-                  isExpanded: true,
-                  items: widget.professores
-                      .map((p) => DropdownMenuItem<String>(
-                            value: p['id'],
-                            child: Text(p['apelido'],
-                                overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() => item['docente_id'] = v),
+        final diasMap = item['dias'] as Map<String, bool>;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          elevation: 0,
+          color: Colors.grey.shade50,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: Colors.grey.shade200)),
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: DropdownButtonFormField<String>(
+                        value: item['docente_id'],
+                        decoration: const InputDecoration(
+                          labelText: 'Docente',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 12),
+                        ),
+                        isExpanded: true,
+                        items: widget.professores
+                            .map((p) => DropdownMenuItem<String>(
+                                  value: p['id'],
+                                  child: Text(p['apelido'],
+                                      overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
+                        onChanged: (v) =>
+                            setState(() => item['docente_id'] = v),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: TextFormField(
+                        controller: item['controller'],
+                        decoration: const InputDecoration(
+                          labelText: 'CH',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 12),
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    if (widget.alocacaoExistente == null &&
+                        itensAlocacao.length > 1)
+                      IconButton(
+                        icon: const Icon(Icons.close,
+                            color: Colors.red, size: 20),
+                        onPressed: () => _removerItem(index),
+                        tooltip: 'Remover',
+                      )
+                  ],
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 1,
-                child: TextFormField(
-                  controller: item['controller'],
-                  decoration: const InputDecoration(
-                    labelText: 'CH',
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (_) => setState(() {}), // Atualizar soma total
-                ),
-              ),
-              if (widget.alocacaoExistente == null && itensAlocacao.length > 1)
-                IconButton(
-                  icon: const Icon(Icons.remove_circle_outline,
-                      color: Colors.red),
-                  onPressed: () => _removerItem(index),
-                  tooltip: 'Remover',
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text('Dias deste prof:',
+                        style: TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    // Mini chips para seleção dos dias DO PROFESSOR
+                    ...diasSemana.map((dia) {
+                      final isSelected = diasMap[dia] == true;
+                      // Apenas habilitado se o dia GLOBAL estiver selecionado?
+                      // Sim, se o dia não existe na disciplina, o prof não pode pegar.
+                      final isGlobalSelected = diasSelecionados[dia] == true;
+
+                      return GestureDetector(
+                        onTap: isGlobalSelected
+                            ? () {
+                                setState(() {
+                                  diasMap[dia] = !isSelected;
+                                });
+                              }
+                            : null,
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                              color: isSelected && isGlobalSelected
+                                  ? Colors.blue
+                                  : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                  color: isGlobalSelected
+                                      ? Colors.blue.withOpacity(0.5)
+                                      : Colors.grey.shade300)),
+                          child: Text(dia.substring(0, 1),
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: isSelected && isGlobalSelected
+                                      ? Colors.white
+                                      : (isGlobalSelected
+                                          ? Colors.black
+                                          : Colors.grey))),
+                        ),
+                      );
+                    }).toList()
+                  ],
                 )
-            ],
+              ],
+            ),
           ),
         );
       }),
@@ -358,14 +429,12 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
   }
 
   void _salvar() {
-    // Validar se todos têm docente
     if (itensAlocacao.any((item) => item['docente_id'] == null)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Selecione os docentes para todas as linhas')));
       return;
     }
 
-    // Calcular CH Total
     double totalCH = 0;
     for (var item in itensAlocacao) {
       totalCH += double.tryParse(item['controller'].text) ?? 0;
@@ -378,28 +447,38 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
       return;
     }
 
-    // Preparar dados comuns
-    final diasAtivos =
-        diasSemana.where((d) => diasSelecionados[d] == true).toList();
-    final slotsAtivos = slotsSelecionados.entries
+    // Slots Globais Selecionados
+    final slotsAtivosGlobais = slotsSelecionados.entries
         .where((e) => e.value)
         .map((e) => e.key)
         .toList();
 
     String turno = 'Manhã';
-    if (slotsAtivos.isNotEmpty) {
-      if (slotsAtivos.first.contains('-T')) turno = 'Tarde';
-      if (slotsAtivos.first.contains('-N')) turno = 'Noite';
+    if (slotsAtivosGlobais.isNotEmpty) {
+      if (slotsAtivosGlobais.first.contains('-T')) turno = 'Tarde';
+      if (slotsAtivosGlobais.first.contains('-N')) turno = 'Noite';
     }
 
-    // Gerar lista de resultados
     List<Map<String, dynamic>> resultados = itensAlocacao.map((item) {
+      final diasMap = item['dias'] as Map<String, bool>;
+
+      // Dias deste professor: Intersecção entre Dias Globais e Dias do Professor
+      final diasAtivosProf = diasSemana
+          .where((d) => diasSelecionados[d] == true && diasMap[d] == true)
+          .toList();
+
+      // Slots deste professor: Slots Globais que pertencem aos Dias Ativos do Professor
+      final slotsAtivosProf = slotsAtivosGlobais.where((slot) {
+        final diaDoSlot = slot.split('-')[0]; // "Segunda-M1" -> "Segunda"
+        return diasAtivosProf.contains(diaDoSlot);
+      }).toList();
+
       return {
         'docente_id': item['docente_id'],
         'ch_alocada': double.tryParse(item['controller'].text) ?? 0,
-        'dias': diasAtivos,
+        'dias': diasAtivosProf,
         'turno': turno,
-        'slots': slotsAtivos,
+        'slots': slotsAtivosProf,
       };
     }).toList();
 
