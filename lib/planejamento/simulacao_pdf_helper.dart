@@ -24,66 +24,66 @@ class SimulacaoPDFHelper {
     try {
       final pdf = pw.Document();
 
-      // 1. PRIMEIRA PÁGINA: Cabeçalho, Info e Resumo Geral
+      // 2. CONTEÚDO UNIFICADO (Uma única MultiPage para fluxo contínuo)
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(25),
           build: (pw.Context context) {
-            return [
-              _buildPDFHeader(),
-              pw.SizedBox(height: 20),
-              _buildPDFInfoSimulacao(
-                  nomeSimulacao, semestreSelecionado, tipoPeriodo),
-              pw.SizedBox(height: 15),
-              _buildPDFResumoPeriodos(
-                periodosAtivos,
+            final List<pw.Widget> content = [];
+
+            // Cabeçalho e Resumo Geral
+            content.add(_buildPDFHeader());
+            content.add(pw.SizedBox(height: 20));
+            content.add(_buildPDFInfoSimulacao(
+                nomeSimulacao, semestreSelecionado, tipoPeriodo));
+            content.add(pw.SizedBox(height: 15));
+            content.add(_buildPDFResumoPeriodos(periodosAtivos,
+                getCHTotalDisciplinas, getCHAlocada, getCHRestante));
+
+            content.add(pw.SizedBox(height: 25));
+            content.add(pw.Divider(thickness: 1));
+            content.add(pw.SizedBox(height: 15));
+
+            // Períodos
+            for (var i = 0; i < periodosAtivos.length; i++) {
+              final periodo = periodosAtivos[i];
+
+              // Cabeçalho do Período
+              content.add(pw.Container(
+                  margin: const pw.EdgeInsets.only(
+                      bottom: 10, top: i == 0 ? 0 : 20),
+                  decoration: const pw.BoxDecoration(
+                      border: pw.Border(
+                          bottom: pw.BorderSide(
+                              color: PdfColors.grey, width: 0.5))),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Simulação: $nomeSimulacao',
+                          style: const pw.TextStyle(
+                              fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('Período: $periodo',
+                          style: pw.TextStyle(
+                              fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  )));
+
+              // Conteúdo do Período
+              content.add(_buildPDFDetalhePeriodoLadoALado(
+                periodo,
+                simulacaoAtual,
+                getDisciplinasPorPeriodo,
                 getCHTotalDisciplinas,
                 getCHAlocada,
                 getCHRestante,
-              ),
-            ];
+              ));
+            }
+
+            return content;
           },
         ),
       );
-
-      // 2. ADICIONAR UMA PÁGINA PARA CADA PERÍODO
-      for (var periodo in periodosAtivos) {
-        pdf.addPage(
-          pw.MultiPage(
-            pageFormat: PdfPageFormat.a4,
-            margin: const pw.EdgeInsets.all(25),
-            header: (context) => pw.Column(
-              children: [
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Simulação: $nomeSimulacao',
-                        style: pw.TextStyle(fontSize: 10)),
-                    pw.Text('Período: $periodo',
-                        style: pw.TextStyle(
-                            fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                pw.Divider(thickness: 0.5),
-                pw.SizedBox(height: 10),
-              ],
-            ),
-            build: (pw.Context context) {
-              return [
-                _buildPDFDetalhePeriodoLadoALado(
-                  periodo,
-                  simulacaoAtual,
-                  getDisciplinasPorPeriodo,
-                  getCHTotalDisciplinas,
-                  getCHAlocada,
-                  getCHRestante,
-                )
-              ];
-            },
-          ),
-        );
-      }
 
       final pdfBytes = await pdf.save();
       final fileName =

@@ -433,130 +433,163 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        elevation: 0,
-        centerTitle: false,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Simulação de Carga Horária',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 20,
-              ),
-            ),
-            if (nomeSimulacaoController.text.isNotEmpty)
-              Text(
-                'Editando: ${nomeSimulacaoController.text}',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
+    return PopScope(
+        canPop: false,
+        onPopInvoked: (didPop) async {
+          if (didPop) return;
+
+          final shouldExit = await showDialog<bool>(
+            context: context,
+            builder: (context) {
+              return AlertDialog(
+                title: const Text('Confirmar Saída'),
+                content: const Text(
+                    'Você salvou suas alterações? Se sair agora, dados não salvos serão perdidos.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false), // Não sair
+                    child: const Text('Voltar'),
+                  ),
+                  ElevatedButton(
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: () => Navigator.pop(context, true), // Sair
+                    child: const Text('Sair sem Salvar',
+                        style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              );
+            },
+          );
+
+          if (shouldExit == true) {
+            if (context.mounted) Navigator.pop(context);
+          }
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            elevation: 0,
+            centerTitle: false,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Simulação de Carga Horária',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                  ),
                 ),
-              ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF0F172A),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          _buildActionButton(
-            icon: Icons.add_rounded,
-            label: 'Novo',
-            onPressed: _novaSimulacao,
-            color: Colors.white24,
-          ),
-          const SizedBox(width: 8),
-          _buildActionButton(
-            icon: Icons.save_rounded,
-            label: 'Salvar',
-            onPressed: () => _salvarSimulacao(),
-            color: const Color(0xFF3B82F6),
-          ),
-          if (idSimulacaoEditando != null) ...[
-            const SizedBox(width: 8),
-            _buildActionButton(
-              icon: Icons.copy_rounded,
-              label: 'Clonar',
-              onPressed: () => _salvarSimulacao(comoNovo: true),
-              color: const Color(0xFF8B5CF6),
+                if (nomeSimulacaoController.text.isNotEmpty)
+                  Text(
+                    'Editando: ${nomeSimulacaoController.text}',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+              ],
             ),
-          ],
-          const SizedBox(width: 8),
-          _buildActionButton(
-            icon: Icons.grid_on_rounded,
-            label: 'Aplicar na Grade',
-            onPressed: _efetivarNaGrade,
-            color: Colors.green,
-          ),
-          const SizedBox(width: 8),
-          _buildActionButton(
-            icon: Icons.picture_as_pdf_rounded,
-            label: 'PDF',
-            onPressed: _exportarParaPDF,
-            color: const Color(0xFFEF4444),
-          ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFF0F172A),
-              const Color(0xFF64748B).withOpacity(0.05),
+            backgroundColor: const Color(0xFF0F172A),
+            iconTheme: const IconThemeData(color: Colors.white),
+            actions: [
+              _buildActionButton(
+                icon: Icons.add_rounded,
+                label: 'Novo',
+                onPressed: _novaSimulacao,
+                color: Colors.white24,
+              ),
+              const SizedBox(width: 8),
+              _buildActionButton(
+                icon: Icons.save_rounded,
+                label: 'Salvar',
+                onPressed: () => _salvarSimulacao(),
+                color: const Color(0xFF3B82F6),
+              ),
+              if (idSimulacaoEditando != null) ...[
+                const SizedBox(width: 8),
+                _buildActionButton(
+                  icon: Icons.copy_rounded,
+                  label: 'Clonar',
+                  onPressed: () => _salvarSimulacao(comoNovo: true),
+                  color: const Color(0xFF8B5CF6),
+                ),
+              ],
+              const SizedBox(width: 8),
+              _buildActionButton(
+                icon: Icons.grid_on_rounded,
+                label: 'Aplicar na Grade',
+                onPressed: _efetivarNaGrade,
+                color: Colors.green,
+              ),
+              const SizedBox(width: 8),
+              _buildActionButton(
+                icon: Icons.picture_as_pdf_rounded,
+                label: 'PDF',
+                onPressed: _exportarParaPDF,
+                color: const Color(0xFFEF4444),
+              ),
+              const SizedBox(width: 12),
             ],
-            stops: const [0.0, 0.15],
           ),
-        ),
-        child: Scrollbar(
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildControlesModernos(),
-                  const SizedBox(height: 20),
-                  _buildSimulacoesSalvasSection(),
-                  const SizedBox(height: 24),
-                  Row(
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF0F172A),
+                  const Color(0xFF64748B).withOpacity(0.05),
+                ],
+                stops: const [0.0, 0.15],
+              ),
+            ),
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0, vertical: 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 4,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3B82F6),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+                      _buildControlesModernos(),
+                      const SizedBox(height: 20),
+                      _buildSimulacoesSalvasSection(),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Container(
+                            width: 4,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3B82F6),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Grade de Períodos',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Grade de Períodos',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
+                      const SizedBox(height: 16),
+                      _buildPeriodosGrid(),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  _buildPeriodosGrid(),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 
   Widget _buildActionButton({
