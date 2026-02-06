@@ -23,73 +23,94 @@ class SimulacaoPDFHelper {
         getDisciplinasPorPeriodo,
   }) async {
     try {
-      final pdf = pw.Document();
+      final pdf = pw.Document(
+        theme: pw.ThemeData.withFont(
+          base: pw.Font.helvetica(),
+          bold: pw.Font.helveticaBold(),
+          italic: pw.Font.helveticaOblique(),
+        ),
+      );
+
       final logo = pw.MemoryImage(
         (await rootBundle.load('assets/ufpb.png')).buffer.asUint8List(),
       );
 
-      // 2. CONTEÚDO UNIFICADO (Uma única MultiPage para fluxo contínuo)
-      pdf.addPage(
-        pw.MultiPage(
+      // 1. PÁGINA INICIAL: Resumo e Dados Gerais
+      pdf.addPage(pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(25),
-          // REMOVIDO header: ... para não repetir em todas as páginas
+          margin: const pw.EdgeInsets.all(30), // Margem um pouco maior
           build: (pw.Context context) {
-            final List<pw.Widget> content = [];
+            return [
+              _buildPDFHeader(
+                  logo, semestreSelecionado, nomeSimulacao, tipoPeriodo),
+              pw.SizedBox(height: 20),
+              _buildPDFInfoSimulacao(
+                  nomeSimulacao, semestreSelecionado, tipoPeriodo),
+              pw.SizedBox(height: 15),
+              _buildPDFResumoPeriodos(periodosAtivos, getCHTotalDisciplinas,
+                  getCHAlocada, getCHRestante),
+            ];
+          }));
 
-            // Cabeçalho (Apenas na primeira página, pois é o primeiro item)
-            content.add(_buildPDFHeader(
-                logo, semestreSelecionado, nomeSimulacao, tipoPeriodo));
+      // 2. PÁGINAS POR PERÍODO (Um por página)
+      for (var periodo in periodosAtivos) {
+        pdf.addPage(
+          pw.MultiPage(
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(30),
+            // Header simples para cada período, apenas indicando a simulação e página, se necessário
+            build: (pw.Context context) {
+              return [
+                pw.Container(
+                    padding: const pw.EdgeInsets.only(bottom: 10),
+                    decoration: const pw.BoxDecoration(
+                        border: pw.Border(
+                            bottom: pw.BorderSide(
+                                color: PdfColors.grey, width: 0.5))),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Simulação: $nomeSimulacao',
+                            style: const pw.TextStyle(
+                                fontSize: 10, color: PdfColors.grey700)),
+                        pw.Text('Período: $periodo',
+                            style: pw.TextStyle(
+                                fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    )),
+                pw.SizedBox(height: 20),
+                ..._buildPDFDetalhePeriodoWidgets(
+                  periodo,
+                  simulacaoAtual,
+                  getDisciplinasPorPeriodo,
+                  getCHTotalDisciplinas,
+                  getCHAlocada,
+                  getCHRestante,
+                )
+              ];
+            },
+          ),
+        );
+      }
 
-            content.add(pw.SizedBox(height: 20));
-            content.add(_buildPDFInfoSimulacao(
-                nomeSimulacao, semestreSelecionado, tipoPeriodo));
-            content.add(pw.SizedBox(height: 15));
-            content.add(_buildPDFResumoPeriodos(periodosAtivos,
-                getCHTotalDisciplinas, getCHAlocada, getCHRestante));
-
-            content.add(pw.SizedBox(height: 25));
-            content.add(pw.Divider(thickness: 1));
-            content.add(pw.SizedBox(height: 15));
-
-            // Períodos
-            for (var i = 0; i < periodosAtivos.length; i++) {
-              final periodo = periodosAtivos[i];
-
-              // Cabeçalho do Período
-              content.add(pw.Container(
-                  margin: pw.EdgeInsets.only(bottom: 10, top: i == 0 ? 0 : 20),
-                  decoration: const pw.BoxDecoration(
-                      border: pw.Border(
-                          bottom: pw.BorderSide(
-                              color: PdfColors.grey, width: 0.5))),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text('Simulação: $nomeSimulacao',
-                          style: const pw.TextStyle(
-                              fontSize: 10, color: PdfColors.grey700)),
-                      pw.Text('Período: $periodo',
-                          style: pw.TextStyle(
-                              fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  )));
-
-              // Conteúdo do Período (Agora retorna lista de widgets)
-              content.addAll(_buildPDFDetalhePeriodoWidgets(
-                periodo,
-                simulacaoAtual,
-                getDisciplinasPorPeriodo,
-                getCHTotalDisciplinas,
-                getCHAlocada,
-                getCHRestante,
-              ));
-            }
-
-            return content;
-          },
-        ),
-      );
+      // 3. PÁGINA FINAL: Resumo por Docente
+      pdf.addPage(pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(30),
+          build: (pw.Context context) {
+            return [
+              pw.Text('RESUMO FINAL POR DOCENTE',
+                  style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.purple800)),
+              pw.SizedBox(height: 10),
+              pw.Divider(),
+              pw.SizedBox(height: 10),
+              _buildResumoDocentes(
+                  simulacaoAtual, periodosAtivos, getDisciplinasPorPeriodo),
+            ];
+          }));
 
       final pdfBytes = await pdf.save();
       final fileName =
@@ -112,39 +133,204 @@ class SimulacaoPDFHelper {
     }
   }
 
+  static pw.Widget _buildResumoDocentes(
+    Map<String, Map<String, dynamic>> simulacaoAtual,
+    List<String> periodosAtivos,
+    List<Map<String, dynamic>> Function(String) getDisciplinas,
+  ) {
+    // 1. Coletar dados
+    final Map<String, Map<String, dynamic>> docentesMap = {};
+
+    for (var periodo in periodosAtivos) {
+      final periodoData = simulacaoAtual[periodo] ?? {};
+      final detalhamento =
+          periodoData['detalhamento'] as Map<String, dynamic>? ?? {};
+      final disciplinas = getDisciplinas(periodo);
+
+      for (var disc in disciplinas) {
+        if (disc['desabilitada'] == true) continue;
+
+        final discId = disc['id'];
+        final discNome = disc['nome_completo']; // Usando nome completo
+        final alocacoes = List.from(detalhamento[discId] ?? []);
+
+        for (var aloc in alocacoes) {
+          final docId = aloc['docente_id'];
+          final docNome = aloc['docente_nome'] ?? 'Desconhecido';
+          final ch = (aloc['ch_alocada'] ?? 0).toDouble();
+          final slots = List<String>.from(aloc['slots'] ?? []);
+
+          if (!docentesMap.containsKey(docId)) {
+            docentesMap[docId] = {
+              'nome': docNome,
+              'ch_total': 0.0,
+              'alocacoes': <Map<String, dynamic>>[],
+            };
+          }
+
+          docentesMap[docId]!['ch_total'] += ch;
+          (docentesMap[docId]!['alocacoes'] as List).add({
+            'disciplina': discNome,
+            'ch': ch,
+            'slots': _formatSlots(slots),
+            'periodo': periodo,
+          });
+        }
+      }
+    }
+
+    // 2. Ordenar por nome
+    final sortedKeys = docentesMap.keys.toList()
+      ..sort((a, b) => (docentesMap[a]!['nome'] as String)
+          .compareTo(docentesMap[b]!['nome'] as String));
+
+    // 3. Montar Tabela
+    return pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey300),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(3), // Docente
+          1: const pw.FlexColumnWidth(5), // Disciplinas/Horários
+        },
+        children: [
+          pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+              children: [
+                _tableHeader('Docente / CH Total'),
+                _tableHeader('Disciplinas Assumidas (Período - CH - Horário)'),
+              ]),
+          ...sortedKeys.map((docId) {
+            final data = docentesMap[docId]!;
+            final alocacoes = data['alocacoes'] as List<Map<String, dynamic>>;
+
+            return pw.TableRow(children: [
+              pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(data['nome'],
+                            style: pw.TextStyle(
+                                fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                        pw.SizedBox(height: 4),
+                        pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: pw.BoxDecoration(
+                                color: PdfColors.green50,
+                                borderRadius: pw.BorderRadius.circular(4),
+                                border:
+                                    pw.Border.all(color: PdfColors.green200)),
+                            child: pw.Text(
+                                'Total: ${(data['ch_total'] as double).toStringAsFixed(1)}h',
+                                style: pw.TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold,
+                                    color: PdfColors.green800)))
+                      ])),
+              pw.Padding(
+                  padding: const pw.EdgeInsets.all(8),
+                  child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: alocacoes.map((aloc) {
+                        return pw.Container(
+                            margin: const pw.EdgeInsets.only(bottom: 4),
+                            padding: const pw.EdgeInsets.only(bottom: 4),
+                            decoration: const pw.BoxDecoration(
+                                border: pw.Border(
+                                    bottom: pw.BorderSide(
+                                        color: PdfColors.grey200, width: 0.5))),
+                            child: pw.Row(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Container(
+                                      width: 4,
+                                      height: 4,
+                                      margin: const pw.EdgeInsets.only(top: 3),
+                                      decoration: const pw.BoxDecoration(
+                                          shape: pw.BoxShape.circle,
+                                          color: PdfColors.blueGrey)),
+                                  pw.SizedBox(width: 6),
+                                  pw.Expanded(
+                                      child: pw.RichText(
+                                          text: pw.TextSpan(
+                                              style: const pw.TextStyle(
+                                                  fontSize: 9),
+                                              children: [
+                                        pw.TextSpan(
+                                            text: '[${aloc['periodo']}º Per] ',
+                                            style: const pw.TextStyle(
+                                                color: PdfColors.grey700,
+                                                fontSize: 8)),
+                                        pw.TextSpan(
+                                            text: '${aloc['disciplina']}',
+                                            style: pw.TextStyle(
+                                                fontWeight:
+                                                    pw.FontWeight.bold)),
+                                        pw.TextSpan(
+                                            text:
+                                                ' (${aloc['ch'].toStringAsFixed(0)}h)'),
+                                        if ((aloc['slots'] as String)
+                                            .isNotEmpty)
+                                          pw.TextSpan(
+                                              text: ' - ${aloc['slots']}',
+                                              style: const pw.TextStyle(
+                                                  fontSize: 8,
+                                                  color:
+                                                      PdfColors.blueGrey800)),
+                                      ])))
+                                ]));
+                      }).toList()))
+            ]);
+          }).toList()
+        ]);
+  }
+
+  static pw.Widget _tableHeader(String text) {
+    return pw.Padding(
+        padding: const pw.EdgeInsets.all(8),
+        child: pw.Text(text,
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)));
+  }
+
   static pw.Widget _buildPDFHeader(pw.MemoryImage logo, String semestre,
       String nomeSimulacao, String tipoPeriodo) {
     return pw.Column(
       children: [
         pw.Row(
           children: [
-            pw.Image(logo, height: 30),
-            pw.SizedBox(width: 10),
+            pw.Image(logo, height: 40),
+            pw.SizedBox(width: 15),
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 pw.Text('UFPB - CCSA - DEPARTAMENTO DE RELAÇÕES INTERNACIONAIS',
                     style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                        fontWeight: pw.FontWeight.bold, fontSize: 11)),
                 pw.Text('Simulação de Carga Horária',
                     style: pw.TextStyle(
-                        fontSize: 12,
+                        fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.purple700)),
+                        color: PdfColors.purple800)),
                 pw.Text(
                     '${semestre.isNotEmpty ? 'Semestre: $semestre' : ''} | $nomeSimulacao | ${tipoPeriodo == 'impar' ? 'Ímpares' : 'Pares'}',
                     style: const pw.TextStyle(
-                        fontSize: 9, color: PdfColors.grey700)),
+                        fontSize: 10, color: PdfColors.grey700)),
               ],
             ),
             pw.Spacer(),
-            pw.Text(
-                'Data: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
-                style: const pw.TextStyle(fontSize: 8)),
+            pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+              pw.Text(
+                'Data de Emissão',
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
+              ),
+              pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()),
+                  style: const pw.TextStyle(
+                      fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            ])
           ],
         ),
         pw.SizedBox(height: 10),
-        pw.Divider(thickness: 0.5, color: PdfColors.purple),
+        pw.Divider(thickness: 1, color: PdfColors.purple800),
         pw.SizedBox(height: 10),
       ],
     );
@@ -153,46 +339,24 @@ class SimulacaoPDFHelper {
   static pw.Widget _buildPDFInfoSimulacao(
       String nome, String semestre, String tipoPeriodo) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(10),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey),
-        borderRadius: pw.BorderRadius.circular(5),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Row(
-            children: [
-              pw.Expanded(
-                child: pw.Text(
-                  'Nome: $nome',
-                  style: pw.TextStyle(
-                      fontSize: 14, fontWeight: pw.FontWeight.bold),
-                ),
-              ),
-              pw.Text(
-                'Data: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
-                style: pw.TextStyle(fontSize: 12, color: PdfColors.grey),
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 8),
-          pw.Row(
-            children: [
-              pw.Text(
-                'Semestre: $semestre',
-                style: pw.TextStyle(fontSize: 12),
-              ),
-              pw.SizedBox(width: 20),
-              pw.Text(
-                'Períodos: ${tipoPeriodo == 'impar' ? 'Ímpares' : 'Pares'}',
-                style: pw.TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey400),
+          borderRadius: pw.BorderRadius.circular(5),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Nome: $nome',
+                style:
+                    pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+            pw.Text('Semestre: $semestre',
+                style: const pw.TextStyle(fontSize: 12)),
+            pw.Text(
+                'Tipo: ${tipoPeriodo == 'impar' ? 'Períodos Ímpares' : 'Períodos Pares'}',
+                style: const pw.TextStyle(fontSize: 12)),
+          ],
+        ));
   }
 
   static pw.Widget _buildPDFResumoPeriodos(
@@ -227,7 +391,7 @@ class SimulacaoPDFHelper {
       periodosData.add(
         pw.TableRow(
           decoration: const pw.BoxDecoration(
-            border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey)),
+            border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey300)),
           ),
           children: [
             _resumoCell(periodo),
@@ -244,7 +408,7 @@ class SimulacaoPDFHelper {
               child: pw.Text(
                 status,
                 style: pw.TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   color: PdfColors.white,
                   fontWeight: pw.FontWeight.bold,
                 ),
@@ -275,7 +439,7 @@ class SimulacaoPDFHelper {
             child: pw.Text(
               chRestanteGeral == 0 ? 'COMPLETO' : 'PENDENTE',
               style: pw.TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 color: chRestanteGeral == 0
                     ? PdfColor.fromInt(0xFF4CAF50)
                     : PdfColor.fromInt(0xFFF44336),
@@ -292,12 +456,12 @@ class SimulacaoPDFHelper {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'RESUMO GERAL',
-          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          'RESUMO POR PERÍODO',
+          style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
         ),
-        pw.SizedBox(height: 10),
+        pw.SizedBox(height: 5),
         pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey),
+          border: pw.TableBorder.all(color: PdfColors.grey400),
           columnWidths: {
             0: const pw.FlexColumnWidth(1.2),
             1: const pw.FlexColumnWidth(1),
@@ -313,10 +477,13 @@ class SimulacaoPDFHelper {
 
   static pw.Widget _resumoHeaderCell(String text) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(8),
+      padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
         text,
-        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
+        style: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold,
+            fontSize: 10,
+            color: PdfColors.grey800),
         textAlign: pw.TextAlign.center,
       ),
     );
@@ -324,11 +491,11 @@ class SimulacaoPDFHelper {
 
   static pw.Widget _resumoCell(String text, {bool bold = false}) {
     final style = pw.TextStyle(
-      fontSize: 12,
+      fontSize: 10,
       fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
     );
     return pw.Padding(
-      padding: const pw.EdgeInsets.all(8),
+      padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
         text,
         style: style,
@@ -337,7 +504,6 @@ class SimulacaoPDFHelper {
     );
   }
 
-  // Renomeado e refatorado para retornar Lista de Widgets para melhor paginação
   static List<pw.Widget> _buildPDFDetalhePeriodoWidgets(
     String periodo,
     Map<String, Map<String, dynamic>> simulacaoAtual,
@@ -356,21 +522,21 @@ class SimulacaoPDFHelper {
 
     final List<pw.Widget> widgets = [];
 
-    // Barra de Status do Período
+    // Barra de Status do Período - Mais compacta
     widgets.add(pw.Container(
-      padding: const pw.EdgeInsets.all(10),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: pw.BoxDecoration(
         color: PdfColor.fromInt(0xFFE8F5E9),
         border: pw.Border.all(color: PdfColor.fromInt(0xFF4CAF50)),
-        borderRadius: pw.BorderRadius.circular(5),
+        borderRadius: pw.BorderRadius.circular(4),
       ),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
           pw.Text(
-            'DETALHAMENTO: $periodo PERÍODO',
+            'DETALHAMENTO',
             style: pw.TextStyle(
-                fontSize: 14,
+                fontSize: 11,
                 fontWeight: pw.FontWeight.bold,
                 color: PdfColor.fromInt(0xFF1B5E20)),
           ),
@@ -388,28 +554,28 @@ class SimulacaoPDFHelper {
       ),
     ));
 
-    widgets.add(pw.SizedBox(height: 15));
+    widgets.add(pw.SizedBox(height: 10));
 
-    // Se tiver detalhamento (novo formato), usa o layout hierárquico
+    // Layout hierárquico
     if (detalhamento != null && detalhamento.isNotEmpty) {
       widgets.add(pw.Table(
         border: pw.TableBorder.all(color: PdfColors.grey300),
         columnWidths: {
           0: const pw.FlexColumnWidth(3), // Disciplina
-          1: const pw.FlexColumnWidth(4), // Docentes Alocados + Dias/Turno
+          1: const pw.FlexColumnWidth(4), // Docentes Alocados
         },
         children: [
           pw.TableRow(
             decoration: const pw.BoxDecoration(color: PdfColors.grey100),
             children: [
               pw.Padding(
-                padding: const pw.EdgeInsets.all(6),
+                padding: const pw.EdgeInsets.all(5),
                 child: pw.Text('Disciplina',
                     style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold, fontSize: 10)),
               ),
               pw.Padding(
-                padding: const pw.EdgeInsets.all(6),
+                padding: const pw.EdgeInsets.all(5),
                 child: pw.Text('Docentes / Dias / Horários',
                     style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold, fontSize: 10)),
@@ -418,7 +584,7 @@ class SimulacaoPDFHelper {
           ),
           ...disciplinasPeriodo.map((disc) {
             final discId = disc['id'];
-            final nome = disc['nome_completo'];
+            final nome = disc['nome_completo']; // Nome completo
             final chDisc = disc['ch_aula'];
             final alocacoes = List.from(detalhamento[discId] ?? []);
             final isDes = disc['desabilitada'] == true;
@@ -435,7 +601,7 @@ class SimulacaoPDFHelper {
                 children: [
                   // Coluna Disciplina
                   pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.all(5),
                       child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
@@ -456,11 +622,11 @@ class SimulacaoPDFHelper {
                           ])),
                   // Coluna Docentes
                   pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
+                      padding: const pw.EdgeInsets.all(5),
                       child: alocacoes.isEmpty
                           ? pw.Text('-',
                               style: const pw.TextStyle(
-                                  fontSize: 9, color: PdfColors.grey))
+                                  fontSize: 8, color: PdfColors.grey))
                           : pw.Column(
                               crossAxisAlignment: pw.CrossAxisAlignment.start,
                               children: alocacoes.map((aloc) {
@@ -479,21 +645,19 @@ class SimulacaoPDFHelper {
                                     margin: const pw.EdgeInsets.only(bottom: 2),
                                     child: pw.Row(children: [
                                       pw.Container(
-                                          width: 4,
-                                          height: 4,
+                                          width: 3,
+                                          height: 3,
+                                          margin:
+                                              const pw.EdgeInsets.only(top: 3),
                                           decoration: const pw.BoxDecoration(
                                               shape: pw.BoxShape.circle,
                                               color: PdfColor.fromInt(
                                                   0xFF1B5E20))),
                                       pw.SizedBox(width: 4),
                                       pw.Expanded(
-                                          child: pw.Text(
-                                        finalText,
-                                        style: pw.TextStyle(
-                                            fontSize: 9,
-                                            font: pw.Font
-                                                .helvetica()), // Fonte mais legível
-                                      ))
+                                          child: pw.Text(finalText,
+                                              style: const pw.TextStyle(
+                                                  fontSize: 9)))
                                     ]));
                               }).toList()))
                 ]);
@@ -501,23 +665,8 @@ class SimulacaoPDFHelper {
         ],
       ));
     } else {
-      // Fallback para o layout antigo (apenas alocacoes gerais)
-      widgets.add(pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Expanded(
-            flex: 5,
-            child: _buildPDFColunaLadoALado(
-                'Disciplinas Ofertadas', disciplinasPeriodo, true),
-          ),
-          pw.SizedBox(width: 15),
-          pw.Expanded(
-            flex: 4,
-            child: _buildPDFColunaLadoALado('Docentes Alocados',
-                List.from(periodoData['alocacoes'] ?? []), false),
-          ),
-        ],
-      ));
+      widgets.add(pw.Text('Sem dados de alocação para este período.',
+          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)));
     }
 
     return widgets;
@@ -525,34 +674,24 @@ class SimulacaoPDFHelper {
 
   static String _formatSlots(List<String> slots) {
     if (slots.isEmpty) return '';
-
-    // Agrupar por dia e turno. Ex: "Segunda-M1", "Segunda-M2" -> "Segunda Manhã"
-    // Entradas: "Segunda-M1", "Quarta-N2"
-    // Saída desejada: 2º Manhã, 4º Noite
-
     final Map<String, Set<String>> diaTurnos = {};
-
     for (var slot in slots) {
       final parts = slot.split('-');
       if (parts.length < 2) continue;
       final dia = parts[0];
-      final turnoCode = parts[1][0]; // M, T, N
-
+      final turnoCode = parts[1][0];
       String turno = '';
       if (turnoCode == 'M')
         turno = 'Manhã';
       else if (turnoCode == 'T')
         turno = 'Tarde';
       else if (turnoCode == 'N') turno = 'Noite';
-
       if (!diaTurnos.containsKey(dia)) {
         diaTurnos[dia] = {};
       }
       diaTurnos[dia]!.add(turno);
     }
-
     List<String> results = [];
-    // Ordenar dias
     final ordemDias = [
       'Segunda',
       'Terça',
@@ -561,7 +700,6 @@ class SimulacaoPDFHelper {
       'Sexta',
       'Sábado'
     ];
-
     for (var dia in ordemDias) {
       if (diaTurnos.containsKey(dia)) {
         String diaAbrev = '';
@@ -576,111 +714,10 @@ class SimulacaoPDFHelper {
         else if (dia == 'Sexta')
           diaAbrev = '6º';
         else if (dia == 'Sábado') diaAbrev = 'Sáb';
-
         final turnos = diaTurnos[dia]!.join('/');
         results.add('$diaAbrev $turnos');
       }
     }
-
     return results.join(', ');
-  }
-
-  static pw.Widget _buildPDFColunaLadoALado(
-      String title, List<dynamic> items, bool isDisciplinas) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(title,
-            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 5),
-        items.isEmpty
-            ? pw.Text(isDisciplinas ? 'Sem disciplinas' : 'Nenhuma alocação',
-                style: const pw.TextStyle(fontSize: 10))
-            : pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(3),
-                  1: const pw.FlexColumnWidth(1),
-                },
-                children: [
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: PdfColor.fromInt(
-                          isDisciplinas ? 0xFFF5F5F5 : 0xFFE8F5E9),
-                    ),
-                    children: [
-                      _smallHeaderCell(isDisciplinas ? 'Nome' : 'Docente'),
-                      _smallHeaderCell('CH'),
-                    ],
-                  ),
-                  ...items.map((item) {
-                    if (isDisciplinas) {
-                      final isDes = item['desabilitada'] == true;
-                      return pw.TableRow(
-                        children: [
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(4),
-                            child: pw.Text(
-                              item['nome_completo'],
-                              style: pw.TextStyle(
-                                fontSize: 8,
-                                color: isDes ? PdfColors.grey : PdfColors.black,
-                                fontStyle: isDes
-                                    ? pw.FontStyle.italic
-                                    : pw.FontStyle.normal,
-                                decoration: isDes
-                                    ? pw.TextDecoration.lineThrough
-                                    : pw.TextDecoration.none,
-                              ),
-                            ),
-                          ),
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(4),
-                            child: pw.Text(
-                                '${item['ch_aula'].toStringAsFixed(1)}h',
-                                style: pw.TextStyle(
-                                    fontSize: 8,
-                                    color: isDes
-                                        ? PdfColors.grey
-                                        : PdfColors.black),
-                                textAlign: pw.TextAlign.center),
-                          ),
-                        ],
-                      );
-                    } else {
-                      return pw.TableRow(
-                        children: [
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(4),
-                            child: pw.Text(item['docente_nome'],
-                                style: pw.TextStyle(fontSize: 8)),
-                          ),
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(4),
-                            child: pw.Text(
-                                '${item['ch_alocada'].toStringAsFixed(1)}h',
-                                style: pw.TextStyle(
-                                    fontSize: 8,
-                                    fontWeight: pw.FontWeight.bold,
-                                    color: PdfColor.fromInt(0xFF1B5E20)),
-                                textAlign: pw.TextAlign.center),
-                          ),
-                        ],
-                      );
-                    }
-                  }).toList(),
-                ],
-              ),
-      ],
-    );
-  }
-
-  static pw.Widget _smallHeaderCell(String text) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(4),
-      child: pw.Text(text,
-          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-          textAlign: pw.TextAlign.center),
-    );
   }
 }
