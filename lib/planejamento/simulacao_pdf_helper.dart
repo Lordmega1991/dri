@@ -33,13 +33,18 @@ class SimulacaoPDFHelper {
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(25),
-          header: (pw.Context context) => _buildPDFHeader(
-              logo, semestreSelecionado, nomeSimulacao, tipoPeriodo),
+          // REMOVIDO header: ... para não repetir em todas as páginas
           build: (pw.Context context) {
             final List<pw.Widget> content = [];
 
-            // Resumo Geral (Agora logo abaixo do header na primeira pagina, ou separado?)
-            // O header vai repetir em todas as paginas. O resumo só na primeira.
+            // Cabeçalho (Apenas na primeira página, pois é o primeiro item)
+            content.add(_buildPDFHeader(
+                logo, semestreSelecionado, nomeSimulacao, tipoPeriodo));
+
+            content.add(pw.SizedBox(height: 20));
+            content.add(_buildPDFInfoSimulacao(
+                nomeSimulacao, semestreSelecionado, tipoPeriodo));
+            content.add(pw.SizedBox(height: 15));
             content.add(_buildPDFResumoPeriodos(periodosAtivos,
                 getCHTotalDisciplinas, getCHAlocada, getCHRestante));
 
@@ -461,59 +466,35 @@ class SimulacaoPDFHelper {
                               children: alocacoes.map((aloc) {
                                 final nomeDocente =
                                     aloc['docente_nome'] ?? 'Desconhecido';
-                                final chDoc = aloc['ch_alocada'] ?? 0;
+                                final chDoc =
+                                    (aloc['ch_alocada'] ?? 0).toDouble();
                                 final slots =
                                     List<String>.from(aloc['slots'] ?? []);
 
-                                // Formatar slots para "2º Manhã, 4º Noite"
                                 final formatedSlots = _formatSlots(slots);
+                                final finalText =
+                                    '$nomeDocente (${chDoc.toStringAsFixed(1)}h)${formatedSlots.isNotEmpty ? ' - $formatedSlots' : ''}';
 
                                 return pw.Container(
-                                    margin: const pw.EdgeInsets.only(bottom: 4),
-                                    padding: const pw.EdgeInsets.only(
-                                        bottom: 4, left: 4),
-                                    decoration: const pw.BoxDecoration(
-                                        border: pw.Border(
-                                            bottom: pw.BorderSide(
-                                                color: PdfColors.grey300,
-                                                width: 0.5))),
-                                    child: pw.Row(
-                                      crossAxisAlignment:
-                                          pw.CrossAxisAlignment.start,
-                                      children: [
-                                        pw.Padding(
-                                          padding:
-                                              const pw.EdgeInsets.only(top: 2),
-                                          child: pw.Container(
-                                              width: 4,
-                                              height: 4,
-                                              decoration:
-                                                  const pw.BoxDecoration(
-                                                      shape: pw.BoxShape.circle,
-                                                      color: PdfColor.fromInt(
-                                                          0xFF1B5E20))),
-                                        ),
-                                        pw.SizedBox(width: 4),
-                                        pw.Expanded(
-                                            child: pw.Column(
-                                          crossAxisAlignment:
-                                              pw.CrossAxisAlignment.start,
-                                          children: [
-                                            pw.Text('$nomeDocente ($chDoc h)',
-                                                style: const pw.TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight:
-                                                        pw.FontWeight.bold)),
-                                            if (formatedSlots.isNotEmpty)
-                                              pw.Text(formatedSlots,
-                                                  style: const pw.TextStyle(
-                                                      fontSize: 8,
-                                                      color:
-                                                          PdfColors.grey700)),
-                                          ],
-                                        ))
-                                      ],
-                                    ));
+                                    margin: const pw.EdgeInsets.only(bottom: 2),
+                                    child: pw.Row(children: [
+                                      pw.Container(
+                                          width: 4,
+                                          height: 4,
+                                          decoration: const pw.BoxDecoration(
+                                              shape: pw.BoxShape.circle,
+                                              color: PdfColor.fromInt(
+                                                  0xFF1B5E20))),
+                                      pw.SizedBox(width: 4),
+                                      pw.Expanded(
+                                          child: pw.Text(
+                                        finalText,
+                                        style: pw.TextStyle(
+                                            fontSize: 9,
+                                            font: pw.Font
+                                                .helvetica()), // Fonte mais legível
+                                      ))
+                                    ]));
                               }).toList()))
                 ]);
           }).toList()

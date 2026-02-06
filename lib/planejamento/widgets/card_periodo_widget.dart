@@ -357,15 +357,13 @@ class CardPeriodoWidget extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (aloc['dias'] != null &&
-                                  (aloc['dias'] as List).isNotEmpty)
+                              if (aloc['slots'] != null &&
+                                  (aloc['slots'] as List).isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: Text(
-                                    (aloc['dias'] as List)
-                                        .map(
-                                            (d) => d.toString().substring(0, 3))
-                                        .join(', '),
+                                    _formatDisplaySlots(
+                                        List<String>.from(aloc['slots'] ?? [])),
                                     style: const TextStyle(
                                         fontSize: 10, color: Color(0xFF64748B)),
                                   ),
@@ -397,6 +395,62 @@ class CardPeriodoWidget extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _formatDisplaySlots(List<String> slots) {
+    if (slots.isEmpty) return '';
+    final Map<String, Set<String>> diaTurnos = {};
+
+    for (var slot in slots) {
+      final parts = slot.split('-');
+      if (parts.length < 2) continue;
+      final dia = parts[0];
+      final turnoCode = parts[1][0]; // M, T, N
+
+      String turno = '';
+      if (turnoCode == 'M')
+        turno = 'Manhã';
+      else if (turnoCode == 'T')
+        turno = 'Tarde';
+      else if (turnoCode == 'N') turno = 'Noite';
+
+      if (!diaTurnos.containsKey(dia)) {
+        diaTurnos[dia] = {};
+      }
+      diaTurnos[dia]!.add(turno);
+    }
+
+    List<String> results = [];
+    final ordemDias = [
+      'Segunda',
+      'Terça',
+      'Quarta',
+      'Quinta',
+      'Sexta',
+      'Sábado'
+    ];
+
+    for (var dia in ordemDias) {
+      if (diaTurnos.containsKey(dia)) {
+        String diaAbrev = '';
+        if (dia == 'Segunda')
+          diaAbrev = '2º';
+        else if (dia == 'Terça')
+          diaAbrev = '3º';
+        else if (dia == 'Quarta')
+          diaAbrev = '4º';
+        else if (dia == 'Quinta')
+          diaAbrev = '5º';
+        else if (dia == 'Sexta')
+          diaAbrev = '6º';
+        else if (dia == 'Sábado') diaAbrev = 'Sáb';
+
+        final turnos = diaTurnos[dia]!.join('/');
+        results.add('$diaAbrev $turnos');
+      }
+    }
+
+    return results.join(', ');
   }
 
   BorderRadius userInteractionBorderRadius(List<dynamic> alocacoes) {
