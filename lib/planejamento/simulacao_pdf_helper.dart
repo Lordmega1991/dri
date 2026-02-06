@@ -25,9 +25,9 @@ class SimulacaoPDFHelper {
     try {
       final pdf = pw.Document(
         theme: pw.ThemeData.withFont(
-          base: pw.Font.helvetica(),
-          bold: pw.Font.helveticaBold(),
-          italic: pw.Font.helveticaOblique(),
+          base: pw.Font.times(),
+          bold: pw.Font.timesBold(),
+          italic: pw.Font.timesItalic(),
         ),
       );
 
@@ -99,7 +99,7 @@ class SimulacaoPDFHelper {
           margin: const pw.EdgeInsets.all(30),
           build: (pw.Context context) {
             return [
-              pw.Text('RESUMO FINAL POR DOCENTE',
+              pw.Text('RESUMO DETALHADO POR DOCENTE',
                   style: pw.TextStyle(
                       fontSize: 16,
                       fontWeight: pw.FontWeight.bold,

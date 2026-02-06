@@ -100,13 +100,20 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                 : ppc == 'antigo'
                     ? ' (Antigo)'
                     : '';
-            final nomeCompleto = '${e['nome']}$ppcTexto$turnoTexto';
+
+            // Prioriza nome_extenso se existir
+            final baseName = (e['nome_extenso'] != null &&
+                    e['nome_extenso'].toString().isNotEmpty)
+                ? e['nome_extenso']
+                : e['nome'];
+
+            final nomeCompleto = '$baseName$ppcTexto$turnoTexto';
 
             return {
               'id': e['id'],
-              'nome': e['nome'],
-              'nome_completo': nomeCompleto,
-              'nome_extenso': e['nome_extenso'] ?? e['nome'],
+              'nome': e['nome'], // Mantém sigla aqui se precisar
+              'nome_completo': nomeCompleto, // Usa nome extenso
+              'nome_extenso': e['nome_extenso'],
               'ch_aula': (e['ch_aula'] ?? 0).toDouble(),
               'periodo': e['periodo'] ?? 'N/A',
               'ppc': ppc,
