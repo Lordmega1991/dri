@@ -475,150 +475,119 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
             if (context.mounted) Navigator.pop(context);
           }
         },
-        child: Scaffold(
-          backgroundColor: const Color(0xFFF8FAFC),
-          appBar: AppBar(
-            elevation: 0,
-            centerTitle: false,
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Simulação de Carga Horária',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 20,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bool isMobile = constraints.maxWidth < 600;
+
+            return Scaffold(
+              backgroundColor: const Color(0xFFF8FAFC),
+              appBar: AppBar(
+                elevation: 0,
+                centerTitle: false,
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Simulação de Carga Horária',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                      ),
+                    ),
+                    if (nomeSimulacaoController.text.isNotEmpty)
+                      Text(
+                        'Editando: ${nomeSimulacaoController.text}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF0F172A),
+                iconTheme: const IconThemeData(color: Colors.white),
+                actions: _buildResponsiveActions(isMobile),
+              ),
+              body: DefaultTabController(
+                key: ValueKey(tipoPeriodo),
+                length: periodos.length,
+                child: NestedScrollView(
+                  headerSliverBuilder: (context, innerBoxIsScrolled) {
+                    return [
+                      SliverToBoxAdapter(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                const Color(0xFF0F172A),
+                                const Color(0xFF64748B).withOpacity(0.05),
+                              ],
+                              stops: const [0.0, 0.15],
+                            ),
+                          ),
+                          padding:
+                              const EdgeInsets.all(24.0).copyWith(bottom: 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildControlesModernos(),
+                              const SizedBox(height: 20),
+                              _buildSimulacoesSalvasSection(),
+                              const SizedBox(height: 10),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SliverAppBar(
+                        pinned: true,
+                        primary: false,
+                        automaticallyImplyLeading: false,
+                        backgroundColor: const Color(0xFFF8FAFC),
+                        elevation: 0,
+                        toolbarHeight: 0,
+                        bottom: PreferredSize(
+                          preferredSize: const Size.fromHeight(50),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                  bottom: BorderSide(
+                                      color: Color(0xFFE2E8F0), width: 1)),
+                            ),
+                            child: TabBar(
+                              isScrollable: true,
+                              labelColor: const Color(0xFF1E293B),
+                              unselectedLabelColor: const Color(0xFF94A3B8),
+                              indicatorColor: const Color(0xFF3B82F6),
+                              labelStyle:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                              tabs: periodos
+                                  .map((p) => Tab(text: '$p Período'))
+                                  .toList(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ];
+                  },
+                  body: TabBarView(
+                    children: periodos.map((periodo) {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24.0, vertical: 16.0),
+                        child: _buildCardPeriodo(periodo),
+                      );
+                    }).toList(),
                   ),
                 ),
-                if (nomeSimulacaoController.text.isNotEmpty)
-                  Text(
-                    'Editando: ${nomeSimulacaoController.text}',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF0F172A),
-            iconTheme: const IconThemeData(color: Colors.white),
-            actions: [
-              _buildActionButton(
-                icon: Icons.add_rounded,
-                label: 'Novo',
-                onPressed: _novaSimulacao,
-                color: Colors.white24,
               ),
-              const SizedBox(width: 8),
-              _buildActionButton(
-                icon: Icons.save_rounded,
-                label: 'Salvar',
-                onPressed: () => _salvarSimulacao(),
-                color: const Color(0xFF3B82F6),
-              ),
-              if (idSimulacaoEditando != null) ...[
-                const SizedBox(width: 8),
-                _buildActionButton(
-                  icon: Icons.copy_rounded,
-                  label: 'Clonar',
-                  onPressed: () => _salvarSimulacao(comoNovo: true),
-                  color: const Color(0xFF8B5CF6),
-                ),
-              ],
-              const SizedBox(width: 8),
-              _buildActionButton(
-                icon: Icons.grid_on_rounded,
-                label: 'Aplicar na Grade',
-                onPressed: _efetivarNaGrade,
-                color: Colors.green,
-              ),
-              const SizedBox(width: 8),
-              _buildActionButton(
-                icon: Icons.picture_as_pdf_rounded,
-                label: 'PDF',
-                onPressed: _exportarParaPDF,
-                color: const Color(0xFFEF4444),
-              ),
-              const SizedBox(width: 12),
-            ],
-          ),
-          body: DefaultTabController(
-            key: ValueKey(tipoPeriodo),
-            length: periodos.length,
-            child: NestedScrollView(
-              headerSliverBuilder: (context, innerBoxIsScrolled) {
-                return [
-                  SliverToBoxAdapter(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            const Color(0xFF0F172A),
-                            const Color(0xFF64748B).withOpacity(0.05),
-                          ],
-                          stops: const [0.0, 0.15],
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(24.0).copyWith(bottom: 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildControlesModernos(),
-                          const SizedBox(height: 20),
-                          _buildSimulacoesSalvasSection(),
-                          const SizedBox(height: 10),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SliverAppBar(
-                    pinned: true,
-                    primary: false,
-                    automaticallyImplyLeading: false,
-                    backgroundColor: const Color(0xFFF8FAFC),
-                    elevation: 0,
-                    toolbarHeight: 0,
-                    bottom: PreferredSize(
-                      preferredSize: const Size.fromHeight(50),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        decoration: const BoxDecoration(
-                          border: Border(
-                              bottom: BorderSide(
-                                  color: Color(0xFFE2E8F0), width: 1)),
-                        ),
-                        child: TabBar(
-                          isScrollable: true,
-                          labelColor: const Color(0xFF1E293B),
-                          unselectedLabelColor: const Color(0xFF94A3B8),
-                          indicatorColor: const Color(0xFF3B82F6),
-                          labelStyle:
-                              const TextStyle(fontWeight: FontWeight.bold),
-                          tabs: periodos
-                              .map((p) => Tab(text: '$p Período'))
-                              .toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ];
-              },
-              body: TabBarView(
-                children: periodos.map((periodo) {
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24.0, vertical: 16.0),
-                    child: _buildCardPeriodo(periodo),
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
+            );
+          },
         ));
   }
 
@@ -657,67 +626,118 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
   }
 
   Widget _buildControlesModernos() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF1E293B).withOpacity(0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: _buildTextField(
-              controller: nomeSimulacaoController,
-              label: 'Nome da Simulação',
-              icon: Icons.edit_note_rounded,
+    return LayoutBuilder(builder: (context, constraints) {
+      final bool isMobile = constraints.maxWidth < 600;
+
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1E293B).withOpacity(0.06),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildDropdown(
-              value:
-                  semestreSelecionado.isNotEmpty ? semestreSelecionado : null,
-              label: 'Semestre',
-              icon: Icons.calendar_today_rounded,
-              items: semestres
-                  .map((s) => DropdownMenuItem<String>(
-                        value: s['display'],
-                        child: Text(s['display']),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => semestreSelecionado = v ?? ''),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: _buildDropdown(
-              value: tipoPeriodo,
-              label: 'Tipo de Período',
-              icon: Icons.layers_rounded,
-              items: const [
-                DropdownMenuItem<String>(
-                  value: 'impar',
-                  child: Text('Períodos Ímpares'),
-                ),
-                DropdownMenuItem<String>(
-                  value: 'par',
-                  child: Text('Períodos Pares'),
-                ),
-              ],
-              onChanged: (v) => setState(() => tipoPeriodo = v ?? 'impar'),
-            ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+        padding: const EdgeInsets.all(20),
+        child: isMobile
+            ? Column(
+                children: [
+                  _buildTextField(
+                    controller: nomeSimulacaoController,
+                    label: 'Nome da Simulação',
+                    icon: Icons.edit_note_rounded,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDropdown(
+                    value: semestreSelecionado.isNotEmpty
+                        ? semestreSelecionado
+                        : null,
+                    label: 'Semestre',
+                    icon: Icons.calendar_today_rounded,
+                    items: semestres
+                        .map((s) => DropdownMenuItem<String>(
+                              value: s['display'],
+                              child: Text(s['display']),
+                            ))
+                        .toList(),
+                    onChanged: (v) =>
+                        setState(() => semestreSelecionado = v ?? ''),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDropdown(
+                    value: tipoPeriodo,
+                    label: 'Tipo de Período',
+                    icon: Icons.layers_rounded,
+                    items: const [
+                      DropdownMenuItem<String>(
+                        value: 'impar',
+                        child: Text('Períodos Ímpares'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'par',
+                        child: Text('Períodos Pares'),
+                      ),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => tipoPeriodo = v ?? 'impar'),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: _buildTextField(
+                      controller: nomeSimulacaoController,
+                      label: 'Nome da Simulação',
+                      icon: Icons.edit_note_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildDropdown(
+                      value: semestreSelecionado.isNotEmpty
+                          ? semestreSelecionado
+                          : null,
+                      label: 'Semestre',
+                      icon: Icons.calendar_today_rounded,
+                      items: semestres
+                          .map((s) => DropdownMenuItem<String>(
+                                value: s['display'],
+                                child: Text(s['display']),
+                              ))
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => semestreSelecionado = v ?? ''),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildDropdown(
+                      value: tipoPeriodo,
+                      label: 'Tipo de Período',
+                      icon: Icons.layers_rounded,
+                      items: const [
+                        DropdownMenuItem<String>(
+                          value: 'impar',
+                          child: Text('Períodos Ímpares'),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'par',
+                          child: Text('Períodos Pares'),
+                        ),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => tipoPeriodo = v ?? 'impar'),
+                    ),
+                  ),
+                ],
+              ),
+      );
+    });
   }
 
   Widget _buildTextField({
@@ -779,6 +799,7 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
           value: value,
           items: items,
           onChanged: onChanged,
+          isExpanded: true, // Adicionado para evitar overflow de texto
           decoration: InputDecoration(
             prefixIcon: Icon(icon, size: 20, color: const Color(0xFF3B82F6)),
             filled: true,
@@ -1315,30 +1336,113 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
       }
     }
   }
-}
 
-class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar _tabBar;
+  List<Widget> _buildResponsiveActions(bool isMobile) {
+    if (isMobile) {
+      return [
+        IconButton(
+          icon: const Icon(Icons.add_rounded, color: Colors.white),
+          onPressed: _novaSimulacao,
+          tooltip: 'Novo',
+        ),
+        IconButton(
+          icon: const Icon(Icons.save_rounded, color: Color(0xFF3B82F6)),
+          onPressed: () => _salvarSimulacao(),
+          tooltip: 'Salvar',
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+          onSelected: (value) {
+            switch (value) {
+              case 'clonar':
+                _salvarSimulacao(comoNovo: true);
+                break;
+              case 'grade':
+                _efetivarNaGrade();
+                break;
+              case 'pdf':
+                _exportarParaPDF();
+                break;
+            }
+          },
+          itemBuilder: (context) => [
+            if (idSimulacaoEditando != null)
+              const PopupMenuItem(
+                value: 'clonar',
+                child: Row(
+                  children: [
+                    Icon(Icons.copy_rounded,
+                        size: 20, color: Color(0xFF8B5CF6)),
+                    SizedBox(width: 12),
+                    Text('Clonar Simulação'),
+                  ],
+                ),
+              ),
+            const PopupMenuItem(
+              value: 'grade',
+              child: Row(
+                children: [
+                  Icon(Icons.grid_on_rounded, size: 20, color: Colors.green),
+                  SizedBox(width: 12),
+                  Text('Aplicar na Grade'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'pdf',
+              child: Row(
+                children: [
+                  Icon(Icons.picture_as_pdf_rounded,
+                      size: 20, color: Color(0xFFEF4444)),
+                  SizedBox(width: 12),
+                  Text('Exportar PDF'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(width: 8),
+      ];
+    }
 
-  _SliverAppBarDelegate(this._tabBar);
-
-  @override
-  double get minExtent => _tabBar.preferredSize.height;
-
-  @override
-  double get maxExtent => _tabBar.preferredSize.height;
-
-  @override
-  Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return Container(
-      color: const Color(0xFFF8FAFC),
-      child: _tabBar,
-    );
-  }
-
-  @override
-  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
-    return false;
+    return [
+      _buildActionButton(
+        icon: Icons.add_rounded,
+        label: 'Novo',
+        onPressed: _novaSimulacao,
+        color: Colors.white24,
+      ),
+      const SizedBox(width: 8),
+      _buildActionButton(
+        icon: Icons.save_rounded,
+        label: 'Salvar',
+        onPressed: () => _salvarSimulacao(),
+        color: const Color(0xFF3B82F6),
+      ),
+      if (idSimulacaoEditando != null) ...[
+        const SizedBox(width: 8),
+        _buildActionButton(
+          icon: Icons.copy_rounded,
+          label: 'Clonar',
+          onPressed: () => _salvarSimulacao(comoNovo: true),
+          color: const Color(0xFF8B5CF6),
+        ),
+      ],
+      const SizedBox(width: 8),
+      _buildActionButton(
+        icon: Icons.grid_on_rounded,
+        label: 'Aplicar na Grade',
+        onPressed: _efetivarNaGrade,
+        color: Colors.green,
+      ),
+      const SizedBox(width: 8),
+      _buildActionButton(
+        icon: Icons.picture_as_pdf_rounded,
+        label: 'PDF',
+        onPressed: _exportarParaPDF,
+        color: const Color(0xFFEF4444),
+      ),
+      const SizedBox(width: 12),
+    ];
   }
 }
