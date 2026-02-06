@@ -1020,6 +1020,25 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
       {Map<String, dynamic>? alocacaoExistente}) async {
     final disciplina = disciplinas.firstWhere((d) => d['id'] == disciplinaId);
 
+    // Calcular CH Disponível
+    final chTotal = disciplina['ch_aula']?.toDouble() ?? 0.0;
+
+    final periodoDataRef = simulacaoAtual[periodo] ?? {};
+    final detalhamentoRef = periodoDataRef['detalhamento'] ?? {};
+    final List<dynamic> alocacoesDaDisc = detalhamentoRef[disciplinaId] ?? [];
+
+    double chJaAlocada = 0;
+    for (var a in alocacoesDaDisc) {
+      chJaAlocada += (a['ch_alocada'] ?? 0).toDouble();
+    }
+
+    double chDisponivel = chTotal - chJaAlocada;
+
+    // Se for edição, devolve a CH da alocação atual para o saldo disponível
+    if (alocacaoExistente != null) {
+      chDisponivel += (alocacaoExistente['ch_alocada'] ?? 0).toDouble();
+    }
+
     final resultado = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => DialogAlocacaoDetalhada(
@@ -1028,6 +1047,7 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
         professores: professores,
         alocacaoExistente: alocacaoExistente,
         chPadrao: disciplina['ch_aula']?.toDouble() ?? 0,
+        chDisponivel: chDisponivel,
       ),
     );
 

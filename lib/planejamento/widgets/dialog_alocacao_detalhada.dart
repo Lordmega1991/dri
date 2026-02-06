@@ -5,6 +5,7 @@ class DialogAlocacaoDetalhada extends StatefulWidget {
   final List<Map<String, dynamic>> professores;
   final Map<String, dynamic>? alocacaoExistente; // Para edição
   final double chPadrao; // CH da disciplina
+  final double chDisponivel; // CH restante para alocar
 
   const DialogAlocacaoDetalhada({
     super.key,
@@ -12,6 +13,7 @@ class DialogAlocacaoDetalhada extends StatefulWidget {
     required this.professores,
     this.alocacaoExistente,
     this.chPadrao = 0,
+    required this.chDisponivel,
   });
 
   @override
@@ -29,7 +31,8 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
     'Terça',
     'Quarta',
     'Quinta',
-    'Sexta'
+    'Sexta',
+    'Sábado'
   ];
   final Map<String, bool> diasSelecionados = {};
 
@@ -70,7 +73,14 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
 
       turnoPredominante = aloc['turno'] ?? 'Manhã';
     } else {
-      chController.text = widget.chPadrao.toString();
+      // Sugere a CH padrão ou o que resta, o que for menor
+      double sugestao = widget.chPadrao;
+      if (widget.chDisponivel < sugestao) {
+        sugestao = widget.chDisponivel;
+      }
+      if (sugestao < 0) sugestao = 0;
+
+      chController.text = sugestao.toString();
     }
   }
 
@@ -113,15 +123,23 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
                   const SizedBox(width: 16),
                   Expanded(
                     flex: 1,
-                    child: TextField(
+                    child: TextFormField(
                       controller: chController,
-                      decoration: const InputDecoration(
-                        labelText: 'CH (h)',
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      decoration: InputDecoration(
+                        labelText: 'CH (Max: ${widget.chDisponivel}h)',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 12),
                       ),
                       keyboardType: TextInputType.number,
+                      validator: (value) {
+                        final v = double.tryParse(value ?? '') ?? 0;
+                        if (v > widget.chDisponivel) {
+                          return 'Máx: ${widget.chDisponivel}';
+                        }
+                        return null;
+                      },
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                     ),
                   ),
                 ],
@@ -281,6 +299,14 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
     if (docenteSelecionado == null) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Selecione um docente')));
+      return;
+    }
+
+    final ch = double.tryParse(chController.text) ?? 0;
+    if (ch > widget.chDisponivel) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'A CH informada excede o limite disponível de ${widget.chDisponivel}h')));
       return;
     }
 
