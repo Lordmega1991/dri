@@ -22,8 +22,8 @@ class DialogAlocacaoDetalhada extends StatefulWidget {
 }
 
 class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
-  String? docenteSelecionado;
-  final TextEditingController chController = TextEditingController();
+  // Lista de itens de alocação (Docente + CH)
+  List<Map<String, dynamic>> itensAlocacao = [];
 
   // Controle de Dias
   final List<String> diasSemana = [
@@ -53,8 +53,13 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
 
     if (widget.alocacaoExistente != null) {
       final aloc = widget.alocacaoExistente!;
-      docenteSelecionado = aloc['docente_id'];
-      chController.text = aloc['ch_alocada'].toString();
+
+      itensAlocacao.add({
+        'docente_id': aloc['docente_id'],
+        'ch': aloc['ch_alocada'].toString(),
+        'controller':
+            TextEditingController(text: aloc['ch_alocada'].toString()),
+      });
 
       // Carregar dias
       if (aloc['dias'] != null) {
@@ -66,84 +71,87 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
       // Carregar Slots
       if (aloc['slots'] != null) {
         for (var slot in aloc['slots']) {
-          // O slot vem como "Dia-TurnoIndice" ex: "Segunda-M1"
           slotsSelecionados[slot] = true;
         }
       }
 
       turnoPredominante = aloc['turno'] ?? 'Manhã';
     } else {
-      // Sugere a CH padrão ou o que resta, o que for menor
-      double sugestao = widget.chPadrao;
-      if (widget.chDisponivel < sugestao) {
-        sugestao = widget.chDisponivel;
-      }
-      if (sugestao < 0) sugestao = 0;
-
-      chController.text = sugestao.toString();
+      // Novo: Começa com um item vazio
+      _adicionarItem();
     }
+  }
+
+  void _adicionarItem() {
+    // Sugestão de CH: o que falta para completar o disponível, dividido pelo número de itens?
+    // Simplificando: Deixa vazio ou com zero.
+    itensAlocacao.add({
+      'docente_id': null,
+      'ch': '',
+      'controller': TextEditingController(),
+    });
+    setState(() {});
+  }
+
+  void _removerItem(int index) {
+    if (itensAlocacao.length <= 1) return;
+    setState(() {
+      itensAlocacao[index]['controller'].dispose();
+      itensAlocacao.removeAt(index);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    // Calcular CH Total usada nos inputs
+    double currentTotal = 0;
+    for (var item in itensAlocacao) {
+      currentTotal += double.tryParse(item['controller'].text) ?? 0;
+    }
+    double remaining = widget.chDisponivel - currentTotal;
+    // Se estiver editando, o chDisponivel já incluiu o valor anterior, então remaining deve ser calculado com cuidado.
+    // Mas a lógica de widget.chDisponivel vinda de fora já está correta (Total - UsadoPorOutros).
+
+    // Se remaining < 0, erro visual?
+
     return AlertDialog(
       title: Text(widget.titulo,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       content: Container(
-        width: 600, // Força largura maior
+        width: 600,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Seleção de Docente e CH
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      value: docenteSelecionado,
-                      decoration: const InputDecoration(
-                        labelText: 'Docente',
-                        border: OutlineInputBorder(),
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                      ),
-                      isExpanded: true,
-                      items: widget.professores
-                          .map((p) => DropdownMenuItem<String>(
-                                value: p['id'],
-                                child: Text(p['apelido'],
-                                    overflow: TextOverflow.ellipsis),
-                              ))
-                          .toList(),
-                      onChanged: (v) => setState(() => docenteSelecionado = v),
-                    ),
+              // Lista de Docentes e CH
+              _buildListaProfessores(),
+
+              if (widget.alocacaoExistente == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                  child: TextButton.icon(
+                    onPressed: _adicionarItem,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Adicionar outro docente'),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 1,
-                    child: TextFormField(
-                      controller: chController,
-                      decoration: InputDecoration(
-                        labelText: 'CH (Max: ${widget.chDisponivel}h)',
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 12),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        final v = double.tryParse(value ?? '') ?? 0;
-                        if (v > widget.chDisponivel) {
-                          return 'Máx: ${widget.chDisponivel}';
-                        }
-                        return null;
-                      },
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+
+              if (remaining < 0)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                      'Atenção: Total excede o disponível em ${(remaining * -1).toStringAsFixed(1)}h',
+                      style: TextStyle(color: Colors.red)),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                      'Disponível restante: ${remaining.toStringAsFixed(1)}h',
+                      style: TextStyle(color: Colors.green)),
+                ),
+
               const SizedBox(height: 20),
 
               // Seleção de Dias
@@ -196,10 +204,65 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
     );
   }
 
-  Widget _buildGridHorarios() {
-    // Apenas mostrar colunas dos dias selecionados para economizar espaço?
-    // Melhor mostrar todos mas desabilitar os não selecionados.
+  Widget _buildListaProfessores() {
+    return Column(
+      children: List.generate(itensAlocacao.length, (index) {
+        final item = itensAlocacao[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  value: item['docente_id'],
+                  decoration: const InputDecoration(
+                    labelText: 'Docente',
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  ),
+                  isExpanded: true,
+                  items: widget.professores
+                      .map((p) => DropdownMenuItem<String>(
+                            value: p['id'],
+                            child: Text(p['apelido'],
+                                overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setState(() => item['docente_id'] = v),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 1,
+                child: TextFormField(
+                  controller: item['controller'],
+                  decoration: const InputDecoration(
+                    labelText: 'CH',
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}), // Atualizar soma total
+                ),
+              ),
+              if (widget.alocacaoExistente == null && itensAlocacao.length > 1)
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline,
+                      color: Colors.red),
+                  onPressed: () => _removerItem(index),
+                  tooltip: 'Remover',
+                )
+            ],
+          ),
+        );
+      }),
+    );
+  }
 
+  Widget _buildGridHorarios() {
     return Table(
       border: TableBorder.all(color: Colors.grey.shade200),
       columnWidths: const {
@@ -224,7 +287,7 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
           ],
         ),
         // Manhã
-        ..._buildTurnoRows('Manhã', 'M', 5), // Geralmente 5 ou 6 aulas
+        ..._buildTurnoRows('Manhã', 'M', 5),
         // Tarde
         ..._buildTurnoRows('Tarde', 'T', 5),
         // Noite
@@ -258,7 +321,6 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
                     ? () {
                         setState(() {
                           slotsSelecionados[key] = !selecionado;
-                          // Auto incrementar CH se selecionar? 50 min = 0.83h? Simplificar: deixa manual a CH.
                         });
                       }
                     : null,
@@ -296,20 +358,27 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
   }
 
   void _salvar() {
-    if (docenteSelecionado == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Selecione um docente')));
+    // Validar se todos têm docente
+    if (itensAlocacao.any((item) => item['docente_id'] == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Selecione os docentes para todas as linhas')));
       return;
     }
 
-    final ch = double.tryParse(chController.text) ?? 0;
-    if (ch > widget.chDisponivel) {
+    // Calcular CH Total
+    double totalCH = 0;
+    for (var item in itensAlocacao) {
+      totalCH += double.tryParse(item['controller'].text) ?? 0;
+    }
+
+    if (totalCH > widget.chDisponivel) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-              'A CH informada excede o limite disponível de ${widget.chDisponivel}h')));
+              'A CH total ($totalCH) excede o limite disponível de ${widget.chDisponivel}h')));
       return;
     }
 
+    // Preparar dados comuns
     final diasAtivos =
         diasSemana.where((d) => diasSelecionados[d] == true).toList();
     final slotsAtivos = slotsSelecionados.entries
@@ -317,20 +386,23 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
         .map((e) => e.key)
         .toList();
 
-    // Identificar turno predominante pelos slots
-    // Lógica simples: primeiro slot
     String turno = 'Manhã';
     if (slotsAtivos.isNotEmpty) {
       if (slotsAtivos.first.contains('-T')) turno = 'Tarde';
       if (slotsAtivos.first.contains('-N')) turno = 'Noite';
     }
 
-    Navigator.pop(context, {
-      'docente_id': docenteSelecionado,
-      'ch_alocada': double.tryParse(chController.text) ?? 0,
-      'dias': diasAtivos,
-      'turno': turno,
-      'slots': slotsAtivos,
-    });
+    // Gerar lista de resultados
+    List<Map<String, dynamic>> resultados = itensAlocacao.map((item) {
+      return {
+        'docente_id': item['docente_id'],
+        'ch_alocada': double.tryParse(item['controller'].text) ?? 0,
+        'dias': diasAtivos,
+        'turno': turno,
+        'slots': slotsAtivos,
+      };
+    }).toList();
+
+    Navigator.pop(context, resultados);
   }
 }

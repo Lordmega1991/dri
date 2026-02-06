@@ -320,7 +320,9 @@ class SimulacaoPDFHelper {
     double Function(String) getRestante,
   ) {
     final disciplinasPeriodo = getDisciplinas(periodo);
-    final alocacoes = simulacaoAtual[periodo]?['alocacoes'] ?? [];
+    final periodoData = simulacaoAtual[periodo] ?? {};
+    final detalhamento = periodoData['detalhamento'] as Map<String, dynamic>?;
+
     final chTotal = getTotal(periodo);
     final chAlocada = getAlocada(periodo);
     final chRestante = getRestante(periodo);
@@ -359,22 +361,126 @@ class SimulacaoPDFHelper {
           ),
         ),
         pw.SizedBox(height: 15),
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Expanded(
-              flex: 5,
-              child: _buildPDFColunaLadoALado(
-                  'Disciplinas Ofertadas', disciplinasPeriodo, true),
-            ),
-            pw.SizedBox(width: 15),
-            pw.Expanded(
-              flex: 4,
-              child: _buildPDFColunaLadoALado(
-                  'Docentes Alocados', alocacoes, false),
-            ),
-          ],
-        ),
+
+        // Se tiver detalhamento (novo formato), usa o layout hierárquico
+        if (detalhamento != null && detalhamento.isNotEmpty) ...[
+          pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(4), // Disciplina
+                1: const pw.FlexColumnWidth(4), // Docentes Alocados
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('Disciplina',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('Docentes Alocados',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    ),
+                  ],
+                ),
+                ...disciplinasPeriodo.map((disc) {
+                  final discId = disc['id'];
+                  final nome = disc['nome_completo'];
+                  final chDisc = disc['ch_aula'];
+                  final alocacoes = List.from(detalhamento[discId] ?? []);
+                  final isDes = disc['desabilitada'] == true;
+
+                  // Calcula CH total alocada nesta disciplina
+                  double chAlocadaDisc = 0;
+                  for (var a in alocacoes)
+                    chAlocadaDisc += (a['ch_alocada'] ?? 0).toDouble();
+
+                  return pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                          color: isDes ? PdfColors.grey50 : PdfColors.white),
+                      children: [
+                        // Coluna Disciplina
+                        pw.Padding(
+                            padding: const pw.EdgeInsets.all(6),
+                            child: pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                children: [
+                                  pw.Text(nome,
+                                      style: pw.TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: pw.FontWeight.bold,
+                                          decoration: isDes
+                                              ? pw.TextDecoration.lineThrough
+                                              : null,
+                                          color: isDes
+                                              ? PdfColors.grey
+                                              : PdfColors.black)),
+                                  pw.Text('CH: ${chDisc}h',
+                                      style: const pw.TextStyle(
+                                          fontSize: 8,
+                                          color: PdfColors.grey700)),
+                                ])),
+                        // Coluna Docentes
+                        pw.Padding(
+                            padding: const pw.EdgeInsets.all(6),
+                            child: alocacoes.isEmpty
+                                ? pw.Text('-',
+                                    style: const pw.TextStyle(
+                                        fontSize: 9, color: PdfColors.grey))
+                                : pw.Column(
+                                    crossAxisAlignment:
+                                        pw.CrossAxisAlignment.start,
+                                    children: alocacoes.map((aloc) {
+                                      final nomeDocente =
+                                          aloc['docente_nome'] ??
+                                              'Desconhecido';
+                                      final chDoc = aloc['ch_alocada'] ?? 0;
+                                      return pw.Container(
+                                          margin: const pw.EdgeInsets.only(
+                                              bottom: 2),
+                                          child: pw.Row(children: [
+                                            pw.Container(
+                                                width: 4,
+                                                height: 4,
+                                                decoration:
+                                                    const pw.BoxDecoration(
+                                                        shape:
+                                                            pw.BoxShape.circle,
+                                                        color: PdfColor.fromInt(
+                                                            0xFF1B5E20))),
+                                            pw.SizedBox(width: 4),
+                                            pw.Text('$nomeDocente ($chDoc h)',
+                                                style: const pw.TextStyle(
+                                                    fontSize: 9))
+                                          ]));
+                                    }).toList()))
+                      ]);
+                }).toList()
+              ])
+        ] else ...[
+          // Fallback para o layout antigo (Lado a Lado desconectado)
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                flex: 5,
+                child: _buildPDFColunaLadoALado(
+                    'Disciplinas Ofertadas', disciplinasPeriodo, true),
+              ),
+              pw.SizedBox(width: 15),
+              pw.Expanded(
+                flex: 4,
+                child: _buildPDFColunaLadoALado('Docentes Alocados',
+                    List.from(periodoData['alocacoes'] ?? []), false),
+              ),
+            ],
+          ),
+        ]
       ],
     );
   }

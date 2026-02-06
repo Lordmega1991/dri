@@ -1039,7 +1039,7 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
       chDisponivel += (alocacaoExistente['ch_alocada'] ?? 0).toDouble();
     }
 
-    final resultado = await showDialog<Map<String, dynamic>>(
+    final resultado = await showDialog<dynamic>(
       context: context,
       builder: (context) => DialogAlocacaoDetalhada(
         titulo:
@@ -1060,8 +1060,6 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
         final periodoData = simulacaoAtual[periodo]!;
         final Map<String, dynamic> rawDetalhamento =
             periodoData['detalhamento'] ?? {};
-
-        // Garante que é um Map mutável do tipo certo para manipulação
         final detalhamento = Map<String, dynamic>.from(rawDetalhamento);
 
         if (!detalhamento.containsKey(disciplinaId)) {
@@ -1071,25 +1069,35 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
         List<dynamic> listaAlocacoes =
             List.from(detalhamento[disciplinaId] ?? []);
 
-        // Adicionar info do professor (nome) para exibição
-        final prof = professores.firstWhere(
-            (p) => p['id'] == resultado['docente_id'],
-            orElse: () => {'apelido': 'Desconhecido'});
-        resultado['docente_nome'] = prof['apelido'];
+        // Normalizar resultado para Lista
+        List<Map<String, dynamic>> novosItens = [];
+        if (resultado is List) {
+          novosItens = List<Map<String, dynamic>>.from(resultado);
+        } else if (resultado is Map) {
+          novosItens = [Map<String, dynamic>.from(resultado)];
+        }
 
-        if (alocacaoExistente != null) {
-          final index = listaAlocacoes.indexOf(alocacaoExistente);
-          if (index != -1) {
-            listaAlocacoes[index] = resultado;
+        for (var item in novosItens) {
+          final prof = professores.firstWhere(
+              (p) => p['id'] == item['docente_id'],
+              orElse: () => {'apelido': 'Desconhecido'});
+          item['docente_nome'] = prof['apelido'];
+
+          if (alocacaoExistente != null) {
+            // Edição (assumindo que edição é sempre unitária por enquanto)
+            final index = listaAlocacoes.indexOf(alocacaoExistente);
+            if (index != -1) {
+              listaAlocacoes[index] = item;
+            }
+          } else {
+            // Novo
+            listaAlocacoes.add(item);
           }
-        } else {
-          listaAlocacoes.add(resultado);
         }
 
         detalhamento[disciplinaId] = listaAlocacoes;
         periodoData['detalhamento'] = detalhamento;
 
-        // Sync com alocacoes simples
         _recalcularAlocacoesPorPeriodo(periodo);
       });
     }
