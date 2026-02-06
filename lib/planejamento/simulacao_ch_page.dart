@@ -440,6 +440,8 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
 
   @override
   Widget build(BuildContext context) {
+    final periodos = _getPeriodosAtivos();
+
     return PopScope(
         canPop: false,
         onPopInvoked: (didPop) async {
@@ -542,57 +544,63 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
               const SizedBox(width: 12),
             ],
           ),
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF0F172A),
-                  const Color(0xFF64748B).withOpacity(0.05),
-                ],
-                stops: const [0.0, 0.15],
-              ),
-            ),
-            child: Scrollbar(
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24.0, vertical: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildControlesModernos(),
-                      const SizedBox(height: 20),
-                      _buildSimulacoesSalvasSection(),
-                      const SizedBox(height: 24),
-                      Row(
+          body: DefaultTabController(
+            key: ValueKey(tipoPeriodo),
+            length: periodos.length,
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) {
+                return [
+                  SliverToBoxAdapter(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            const Color(0xFF0F172A),
+                            const Color(0xFF64748B).withOpacity(0.05),
+                          ],
+                          stops: const [0.0, 0.15],
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(24.0).copyWith(bottom: 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 4,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF3B82F6),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Grade de Períodos',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
+                          _buildControlesModernos(),
+                          const SizedBox(height: 20),
+                          _buildSimulacoesSalvasSection(),
+                          const SizedBox(height: 10),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      _buildPeriodosGrid(),
-                    ],
+                    ),
                   ),
-                ),
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _SliverAppBarDelegate(
+                      TabBar(
+                        isScrollable: true,
+                        labelColor: const Color(0xFF1E293B),
+                        unselectedLabelColor: const Color(0xFF94A3B8),
+                        indicatorColor: const Color(0xFF3B82F6),
+                        labelStyle:
+                            const TextStyle(fontWeight: FontWeight.bold),
+                        tabs: periodos
+                            .map((p) => Tab(text: '$p Período'))
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                ];
+              },
+              body: TabBarView(
+                children: periodos.map((periodo) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24.0, vertical: 16.0),
+                    child: _buildCardPeriodo(periodo),
+                  );
+                }).toList(),
               ),
             ),
           ),
@@ -891,27 +899,6 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPeriodosGrid() {
-    final periodos = _getPeriodosAtivos();
-
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 20,
-        mainAxisSpacing: 20,
-        childAspectRatio:
-            1.1, // Ajuste este valor se os cards precisarem de mais altura
-      ),
-      itemCount: periodos.length,
-      itemBuilder: (context, index) {
-        return _buildCardPeriodo(periodos[index]);
-      },
     );
   }
 
@@ -1312,5 +1299,31 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
             SnackBar(content: Text('Erro ao efetivar na grade: $e')));
       }
     }
+  }
+}
+
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  final TabBar _tabBar;
+
+  _SliverAppBarDelegate(this._tabBar);
+
+  @override
+  double get minExtent => _tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => _tabBar.preferredSize.height;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: const Color(0xFFF8FAFC),
+      child: _tabBar,
+    );
+  }
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
+    return false;
   }
 }
