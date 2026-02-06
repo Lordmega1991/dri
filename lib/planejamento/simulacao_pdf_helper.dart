@@ -51,8 +51,7 @@ class SimulacaoPDFHelper {
 
               // Cabeçalho do Período
               content.add(pw.Container(
-                  margin: const pw.EdgeInsets.only(
-                      bottom: 10, top: i == 0 ? 0 : 20),
+                  margin: pw.EdgeInsets.only(bottom: 10, top: i == 0 ? 0 : 20),
                   decoration: const pw.BoxDecoration(
                       border: pw.Border(
                           bottom: pw.BorderSide(
@@ -420,7 +419,8 @@ class SimulacaoPDFHelper {
                                           color: isDes
                                               ? PdfColors.grey
                                               : PdfColors.black)),
-                                  pw.Text('CH: ${chDisc}h',
+                                  pw.Text(
+                                      'CH: ${chAlocadaDisc > 0 ? '${chAlocadaDisc}h / ' : ''}${chDisc}h',
                                       style: const pw.TextStyle(
                                           fontSize: 8,
                                           color: PdfColors.grey700)),
