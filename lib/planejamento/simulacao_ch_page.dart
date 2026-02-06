@@ -575,19 +575,34 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                       ),
                     ),
                   ),
-                  SliverPersistentHeader(
+                  SliverAppBar(
                     pinned: true,
-                    delegate: _SliverAppBarDelegate(
-                      TabBar(
-                        isScrollable: true,
-                        labelColor: const Color(0xFF1E293B),
-                        unselectedLabelColor: const Color(0xFF94A3B8),
-                        indicatorColor: const Color(0xFF3B82F6),
-                        labelStyle:
-                            const TextStyle(fontWeight: FontWeight.bold),
-                        tabs: periodos
-                            .map((p) => Tab(text: '$p Período'))
-                            .toList(),
+                    primary: false,
+                    automaticallyImplyLeading: false,
+                    backgroundColor: const Color(0xFFF8FAFC),
+                    elevation: 0,
+                    toolbarHeight: 0,
+                    bottom: PreferredSize(
+                      preferredSize: const Size.fromHeight(48),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                              bottom: BorderSide(
+                                  color: Color(0xFFE2E8F0), width: 1)),
+                        ),
+                        child: TabBar(
+                          isScrollable: true,
+                          labelColor: const Color(0xFF1E293B),
+                          unselectedLabelColor: const Color(0xFF94A3B8),
+                          indicatorColor: const Color(0xFF3B82F6),
+                          labelStyle:
+                              const TextStyle(fontWeight: FontWeight.bold),
+                          tabs: periodos
+                              .map((p) => Tab(text: '$p Período'))
+                              .toList(),
+                        ),
                       ),
                     ),
                   ),
