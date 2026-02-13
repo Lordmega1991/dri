@@ -112,7 +112,7 @@ class GradePDFHelper {
                                   borderRadius: pw.BorderRadius.circular(10),
                                 ),
                                 child: pw.Text(
-                                    'TOTAL: ${cargaHoraria.toStringAsFixed(1)} H',
+                                    'TOTAL: ${cargaHoraria.toStringAsFixed(1)} h.a. (${(cargaHoraria * 15).toStringAsFixed(0)}h)',
                                     style: pw.TextStyle(
                                         fontSize: 9,
                                         color: PdfColors.white,
@@ -148,8 +148,8 @@ class GradePDFHelper {
                                       final ch = detalhe['carga_horaria'] ?? 0;
 
                                       String infoAtividade = isDisciplina
-                                          ? '$nome - $nomeExtenso (${(ch as num).toStringAsFixed(1)} h)'
-                                          : '$nome (${(ch as num).toStringAsFixed(1)} h)';
+                                          ? '$nome - $nomeExtenso (${(ch as num).toStringAsFixed(1)} h.a. | ${(ch * 15).toStringAsFixed(0)}h)'
+                                          : '$nome (${(ch as num).toStringAsFixed(1)} h.a. | ${(ch * 15).toStringAsFixed(0)}h)';
 
                                       return pw.Padding(
                                         padding:

@@ -1300,17 +1300,29 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
     if (confirmar != true) return;
 
     try {
-      await supabase
-          .from('grade_aulas')
-          .delete()
-          .eq('semestre', semestreSelecionado);
+      // 1. Limpa os dados existentes para o semestre (ambas as tabelas)
+      await Future.wait([
+        supabase
+            .from('grade_aulas')
+            .delete()
+            .eq('semestre', semestreSelecionado),
+        supabase
+            .from('alocacoes_docentes')
+            .delete()
+            .eq('semestre', semestreSelecionado),
+      ]);
 
-      final List<Map<String, dynamic>> inserts = [];
+      final Map<String, Map<String, dynamic>> consolidated = {};
+      // Mapa para armazenar a CH alocada por professor-disciplina
+      // Usamos Map<docente_id, Map<disciplina_id, ch_alocada>> para evitar problemas com UUIDs em chaves de string
+      final Map<String, Map<String, double>> chPorProfessorDisciplina = {};
 
       for (var periodoEntry in simulacaoAtual.entries) {
-        final Map<String, dynamic> periodoData = periodoEntry.value;
-        final Map<String, dynamic> detalhamento =
-            periodoData['detalhamento'] ?? {};
+        // Conversão defensiva do valor do período
+        final periodoData = Map<String, dynamic>.from(periodoEntry.value);
+
+        final detalhamento = Map<String, dynamic>.from(
+            periodoData['detalhamento'] ?? <String, dynamic>{});
 
         for (var discEntry in detalhamento.entries) {
           final String discId = discEntry.key;
@@ -1318,15 +1330,47 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
 
           if (listaAlocacoes is List) {
             for (var aloc in listaAlocacoes) {
-              final docenteId = aloc['docente_id'];
-              final List<dynamic> slots = aloc['slots'] ?? [];
+              // Conversão defensiva da alocação
+              final Map<String, dynamic> alocMap = aloc is Map
+                  ? Map<String, dynamic>.from(aloc)
+                  : <String, dynamic>{};
+
+              final docenteId = alocMap['docente_id'];
+              final chAlocada = (alocMap['ch_alocada'] ?? 0).toDouble();
+              final List<dynamic> slots = alocMap['slots'] ?? [];
+
+              // Armazena a CH alocada para este professor-disciplina (independente de slots)
+              if (docenteId != null && chAlocada > 0) {
+                chPorProfessorDisciplina.putIfAbsent(docenteId, () => {});
+                chPorProfessorDisciplina[docenteId]![discId] =
+                    (chPorProfessorDisciplina[docenteId]![discId] ?? 0) +
+                        chAlocada;
+              }
 
               for (var slot in slots) {
                 if (slot is String && slot.contains('-')) {
                   final parts = slot.split('-'); // [Segunda, M1]
                   if (parts.length >= 2) {
-                    final dia = parts[0];
+                    final diaLong = parts[0];
                     final timeCode = parts[1]; // M1
+
+                    // Mapper robusto para o formato 'Seg', 'Ter' exigido pela grade
+                    String dia = 'Seg';
+                    if (diaLong.startsWith('Seg'))
+                      dia = 'Seg';
+                    else if (diaLong.startsWith('Ter'))
+                      dia = 'Ter';
+                    else if (diaLong.startsWith('Qua'))
+                      dia = 'Qua';
+                    else if (diaLong.startsWith('Qui'))
+                      dia = 'Qui';
+                    else if (diaLong.startsWith('Sex'))
+                      dia = 'Sex';
+                    else if (diaLong.startsWith('Sáb') ||
+                        diaLong.startsWith('Sab'))
+                      dia = 'Sáb';
+                    else
+                      dia = diaLong.substring(0, 3);
 
                     final turnoLetra = timeCode[0]; // M
                     final indiceStr = timeCode.substring(1); // 1
@@ -1336,14 +1380,27 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
                     if (turnoLetra == 'T') turno = 'Tarde';
                     if (turnoLetra == 'N') turno = 'Noite';
 
-                    inserts.add({
-                      'semestre': semestreSelecionado,
-                      'dia': dia,
-                      'turno': turno,
-                      'indice': indice,
-                      'disciplina_id': discId,
-                      'professores': [docenteId],
-                    });
+                    // Chave única para consolidar co-docência no mesmo slot/disciplina
+                    final compositeKey = '$dia-$turno-$indice-$discId';
+
+                    if (!consolidated.containsKey(compositeKey)) {
+                      consolidated[compositeKey] = {
+                        'semestre': semestreSelecionado,
+                        'dia': dia,
+                        'turno': turno,
+                        'indice': indice,
+                        'disciplina_id': discId,
+                        'professores': [],
+                      };
+                    }
+
+                    if (docenteId != null) {
+                      final List listProfs =
+                          consolidated[compositeKey]!['professores'];
+                      if (!listProfs.contains(docenteId)) {
+                        listProfs.add(docenteId);
+                      }
+                    }
                   }
                 }
               }
@@ -1352,21 +1409,48 @@ class _SimulacaoCHPageState extends State<SimulacaoCHPage> {
         }
       }
 
-      if (inserts.isEmpty) {
+      // Prepara inserts da Grade (Slots)
+      final List<Map<String, dynamic>> insertsGrade =
+          consolidated.values.map((item) {
+        // A tabela grade_aulas não tem ch_professores, então removemos
+        // item.remove('ch_professores'); // Já removido na lógica anterior, mas bom verificar
+        return item;
+      }).toList();
+
+      // Prepara inserts de Alocações (CH)
+      final List<Map<String, dynamic>> insertsAlocacoes = [];
+      chPorProfessorDisciplina.forEach((docenteId, discChMap) {
+        discChMap.forEach((disciplinaId, chAlocada) {
+          insertsAlocacoes.add({
+            'semestre': semestreSelecionado,
+            'docente_id': docenteId,
+            'disciplina_id': disciplinaId,
+            'ch_alocada': chAlocada,
+          });
+        });
+      });
+
+      if (insertsGrade.isEmpty && insertsAlocacoes.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content:
-                  Text('Nenhum horário definido na simulação para exportar.')));
+              content: Text(
+                  'Nenhum horário ou alocação definida na simulação para exportar.')));
         }
         return;
       }
 
-      await supabase.from('grade_aulas').insert(inserts);
+      // Executa os inserts em paralelo
+      await Future.wait([
+        if (insertsGrade.isNotEmpty)
+          supabase.from('grade_aulas').insert(insertsGrade),
+        if (insertsAlocacoes.isNotEmpty)
+          supabase.from('alocacoes_docentes').insert(insertsAlocacoes),
+      ]);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content:
-                Text('Sucesso! ${inserts.length} aulas agendadas na grade.')));
+            content: Text(
+                'Sucesso! ${insertsGrade.length} aulas agendadas e ${insertsAlocacoes.length} alocações de CH salvas.')));
       }
     } catch (e) {
       if (mounted) {

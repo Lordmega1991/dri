@@ -251,16 +251,27 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
                     const SizedBox(width: 8),
                     Expanded(
                       flex: 1,
-                      child: TextFormField(
-                        controller: item['controller'],
-                        decoration: const InputDecoration(
-                          labelText: 'CH',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 12),
-                        ),
-                        keyboardType: TextInputType.number,
-                        onChanged: (_) => setState(() {}),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          TextFormField(
+                            controller: item['controller'],
+                            decoration: const InputDecoration(
+                              labelText: 'CH',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 12),
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${((double.tryParse(item['controller'].text) ?? 0) / 15).toStringAsFixed(1)} aula(s)',
+                            style: const TextStyle(
+                                fontSize: 9, color: Colors.blueGrey),
+                          ),
+                        ],
                       ),
                     ),
                     if (widget.alocacaoExistente == null &&
@@ -446,6 +457,10 @@ class _DialogAlocacaoDetalhadaState extends State<DialogAlocacaoDetalhada> {
       return;
     }
 
+    _finalizarSalvamento();
+  }
+
+  void _finalizarSalvamento() {
     // Slots Globais Selecionados
     final slotsAtivosGlobais = slotsSelecionados.entries
         .where((e) => e.value)

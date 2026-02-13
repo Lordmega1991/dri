@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'grade_pdf_helper.dart';
+import 'grade/widgets/dialog_lancamento_grade.dart';
 
 class GradeAulasPage extends StatefulWidget {
   const GradeAulasPage({super.key});
@@ -341,17 +342,30 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
 
   Future<void> _loadGrade() async {
     if (semestreAtual.isEmpty) return;
-
     try {
       // Primeiro carrega as atividades administrativas do semestre atual
       await _loadAtividadesAdministrativasPorSemestre(semestreAtual);
 
-      // Carrega apenas o semestre atual selecionado
+      // 1. Carrega a GRADE (Essencial - Slots)
       final responseGrade = await supabase
           .from('grade_aulas')
           .select(
-              'id, dia, turno, indice, disciplina_id, professores, semestre, disciplinas!inner(nome, nome_extenso, periodo, turno, ppc)')
+              'id, dia, turno, indice, disciplina_id, professores, semestre, disciplinas!inner(id, nome, nome_extenso, periodo, turno, ppc, ch_aula)')
           .eq('semestre', semestreAtual);
+
+      // 2. Tenta carregar ALOCAÇÕES (Opcional - CH exata)
+      // Se falhar (tabela não existe ou erro de FK), segue sem elas e usa fallback
+      List<dynamic> responseAlocacoes = [];
+      try {
+        responseAlocacoes = await supabase
+            .from('alocacoes_docentes')
+            .select(
+                'docente_id, disciplina_id, ch_alocada, disciplina:disciplinas!inner(id, nome, nome_extenso, periodo, turno, ppc)')
+            .eq('semestre', semestreAtual);
+      } catch (e) {
+        debugPrint(
+            'Aviso: Não foi possível carregar alocacoes_docentes. Usando cálculo por slots. Erro: $e');
+      }
 
       // OTIMIZAÇÃO: Mapear professores por ID para busca O(1)
       final professoresMap = {for (var p in professores) p['id'].toString(): p};
@@ -360,6 +374,10 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
       Map<String, num> cargaHorariaTemp = {};
       Map<String, List<Map<String, dynamic>>> detalhesTemp = {};
       Map<String, List<Map<String, dynamic>>> horariosTemp = {};
+
+      // Mapa auxiliar para saber se a CH do professor/disciplina já foi processada via tabela nova
+      // Chave: docenteId-disciplinaId
+      final Set<String> chProcessadaViaAlocacao = {};
 
       // Processa as atividades administrativas dos professores
       Map<String, int> cargaHorariaAtividades = {};
@@ -370,12 +388,16 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
         // Busca O(1)
         final professor = professoresMap[docenteId] ??
             {'apelido': 'Professor não encontrado'};
-
         final nomeProfessor = professor['apelido'];
         final descricao = atividade['descricao'] ?? 'Atividade Administrativa';
         final quantidadeNum = atividade['quantidade'] ?? 0;
         final quantidade =
             quantidadeNum is int ? quantidadeNum : quantidadeNum.toInt();
+
+        // Inicializa carga horária se necessário
+        cargaHorariaTemp.putIfAbsent(nomeProfessor, () => 0);
+        cargaHorariaTemp[nomeProfessor] =
+            (cargaHorariaTemp[nomeProfessor] ?? 0) + quantidade;
 
         cargaHorariaAtividades[nomeProfessor] =
             (cargaHorariaAtividades[nomeProfessor] ?? 0) + quantidade as int;
@@ -391,25 +413,73 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
         });
       }
 
-      // Processa as aulas da grade
+      // A. Processa ALOCAÇÕES (Fonte da Verdade para CH NOVA)
+      for (var alocacao in responseAlocacoes) {
+        final docenteId = alocacao['docente_id'].toString();
+        final professor = professoresMap[docenteId];
+
+        if (professor != null) {
+          final nomeProfessor = professor['apelido'];
+          final chAlocada = (alocacao['ch_alocada'] ?? 0).toDouble() / 15.0;
+
+          // Soma CH total
+          cargaHorariaTemp.putIfAbsent(nomeProfessor, () => 0);
+          cargaHorariaTemp[nomeProfessor] =
+              (cargaHorariaTemp[nomeProfessor] ?? 0) + chAlocada;
+
+          // Detalhes da disciplina para o relatório
+          final Map<String, dynamic> discInfo =
+              Map<String, dynamic>.from(alocacao['disciplina'] ?? {});
+          final disciplinaId = discInfo['id'].toString();
+          final disciplinaNome = discInfo['nome'] ?? 'Disciplina';
+          final disciplinaNomeExtenso =
+              discInfo['nome_extenso'] ?? disciplinaNome;
+          final periodo = discInfo['periodo']?.toString() ?? '';
+          final turnoDisc = discInfo['turno']?.toString() ?? '';
+          final ppc = discInfo['ppc']?.toString() ?? '';
+
+          // Marca como processada
+          chProcessadaViaAlocacao.add('$docenteId-$disciplinaId');
+
+          if (!detalhesTemp.containsKey(nomeProfessor)) {
+            detalhesTemp[nomeProfessor] = [];
+          }
+
+          detalhesTemp[nomeProfessor]!.add({
+            'tipo': 'disciplina',
+            'nome': disciplinaNome,
+            'nome_extenso': disciplinaNomeExtenso,
+            'carga_horaria': chAlocada,
+            'semestre': semestreAtual,
+            'periodo': periodo,
+            'turno': turnoDisc,
+            'ppc': ppc,
+          });
+        }
+      }
+
+      // B. Processa GRADE (Visualização + Fallback de CH ANTIGA)
       for (var item in responseGrade) {
         final key = '${item['dia']}-${item['turno']}-${item['indice']}';
+
+        // Extração robusta das informações da disciplina
+        final dynamic joinedDisc = item['disciplinas'];
+        // Conversão defensiva para Map<String, dynamic>
+        final Map<String, dynamic> discInfo = Map<String, dynamic>.from(
+            (joinedDisc is List && joinedDisc.isNotEmpty)
+                ? joinedDisc[0]
+                : (joinedDisc is Map ? joinedDisc : <String, dynamic>{}));
+
+        final disciplinaId = item['disciplina_id'].toString();
         final disciplinaNome =
-            item['disciplinas']?['nome'] ?? 'Disciplina não especificada';
+            discInfo['nome'] ?? 'Disciplina não especificada';
         final disciplinaNomeExtenso =
-            item['disciplinas']?['nome_extenso'] ?? disciplinaNome;
+            discInfo['nome_extenso'] ?? disciplinaNome;
         final dia = item['dia'].toString();
         final turno = item['turno'].toString();
         final indice = item['indice'] as int;
         final semestre = item['semestre']?.toString() ?? '';
         final horarioCompleto = _getHorarioCompleto(turno, indice);
-
-        // Extração robusta das informações da disciplina (trata se o Supabase retornar Map ou List)
-        final dynamic joinedDisc = item['disciplinas'];
-        final Map<String, dynamic> discInfo = (joinedDisc is List &&
-                joinedDisc.isNotEmpty)
-            ? Map<String, dynamic>.from(joinedDisc[0])
-            : (joinedDisc is Map ? Map<String, dynamic>.from(joinedDisc) : {});
 
         final periodo = discInfo['periodo']?.toString() ?? '';
         final turnoDisc = discInfo['turno']?.toString() ?? '';
@@ -419,47 +489,14 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
         if (item['professores'] != null &&
             (item['professores'] as List).isNotEmpty) {
           final professoresIds = (item['professores'] as List).cast<String>();
+
           for (var professorId in professoresIds) {
-            // Busca O(1)
             final professor = professoresMap[professorId] ??
                 {'apelido': 'Professor não encontrado'};
             final nomeProfessor = professor['apelido'];
             nomesProfessores.add(nomeProfessor);
 
-            final cargaAtual = cargaHorariaTemp[nomeProfessor] ?? 0;
-            final double pesoSlot = 1.0 / professoresIds.length;
-            cargaHorariaTemp[nomeProfessor] = cargaAtual + pesoSlot;
-
-            if (!detalhesTemp.containsKey(nomeProfessor)) {
-              detalhesTemp[nomeProfessor] = [];
-            }
-
-            final disciplinaExistente = detalhesTemp[nomeProfessor]!.firstWhere(
-              (d) => d['nome'] == disciplinaNome && d['tipo'] == 'disciplina',
-              orElse: () => {},
-            );
-
-            if (disciplinaExistente.isEmpty) {
-              detalhesTemp[nomeProfessor]!.add({
-                'tipo': 'disciplina',
-                'nome': disciplinaNome,
-                'nome_extenso': disciplinaNomeExtenso,
-                'carga_horaria': pesoSlot,
-                'semestre': semestre,
-                'periodo': periodo,
-                'turno': turnoDisc,
-                'ppc': ppc,
-              });
-            } else {
-              final index =
-                  detalhesTemp[nomeProfessor]!.indexOf(disciplinaExistente);
-              detalhesTemp[nomeProfessor]![index]['carga_horaria'] =
-                  (detalhesTemp[nomeProfessor]![index]['carga_horaria']
-                          as num) +
-                      pesoSlot;
-            }
-
-            // Adiciona horário ao professor
+            // Adiciona horário ao professor (Visualização)
             if (!horariosTemp.containsKey(nomeProfessor)) {
               horariosTemp[nomeProfessor] = [];
             }
@@ -472,6 +509,50 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
               'indice': indice,
               'semestre': semestre,
             });
+
+            // LÓGICA HÍBRIDA:
+            // Se já processamos a CH desse professor/disciplina via tabela nova, NÃO faz nada.
+            // Se NÃO processamos (dado antigo ou tabela nova vazia), CALCULAMOS via slots.
+            if (!chProcessadaViaAlocacao
+                .contains('$professorId-$disciplinaId')) {
+              // Fallback: Cálculo por slot (1h / num_professores)
+              final double pesoSlot = 1.0 / professoresIds.length;
+
+              cargaHorariaTemp.putIfAbsent(nomeProfessor, () => 0);
+              cargaHorariaTemp[nomeProfessor] =
+                  (cargaHorariaTemp[nomeProfessor] ?? 0) + pesoSlot;
+
+              // Adiciona ou atualiza detalhesTemp para dados antigos
+              if (!detalhesTemp.containsKey(nomeProfessor)) {
+                detalhesTemp[nomeProfessor] = [];
+              }
+
+              final disciplinaExistente =
+                  detalhesTemp[nomeProfessor]!.firstWhere(
+                (d) => d['nome'] == disciplinaNome && d['tipo'] == 'disciplina',
+                orElse: () => {},
+              );
+
+              if (disciplinaExistente.isEmpty) {
+                detalhesTemp[nomeProfessor]!.add({
+                  'tipo': 'disciplina',
+                  'nome': disciplinaNome,
+                  'nome_extenso': disciplinaNomeExtenso,
+                  'carga_horaria': pesoSlot,
+                  'semestre': semestre,
+                  'periodo': periodo,
+                  'turno': turnoDisc,
+                  'ppc': ppc,
+                });
+              } else {
+                final index =
+                    detalhesTemp[nomeProfessor]!.indexOf(disciplinaExistente);
+                detalhesTemp[nomeProfessor]![index]['carga_horaria'] =
+                    (detalhesTemp[nomeProfessor]![index]['carga_horaria']
+                            as num) +
+                        pesoSlot;
+              }
+            }
           }
         }
 
@@ -609,212 +690,530 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
 
     String? disciplinaId;
     Map<String, dynamic>? disciplinaDados;
-    List<String> professoresSelecionados = [];
+    List<Map<String, dynamic>> professoresAlocacao = [];
     Map<String, Map<String, List<int>>> horariosSelecionados = {};
     final semestreController = TextEditingController(text: semestreAtual);
+
+    // Adiciona um professor inicial
+    void _adicionarProfessor(StateSetter setModalState) {
+      setModalState(() {
+        professoresAlocacao.add({
+          'id': null,
+          'ch_controller': TextEditingController(),
+        });
+      });
+    }
+
+    void _removerProfessor(int index, StateSetter setModalState) {
+      if (professoresAlocacao.length <= 1) return;
+      setModalState(() {
+        professoresAlocacao[index]['ch_controller'].dispose();
+        professoresAlocacao.removeAt(index);
+      });
+    }
+
+    professoresAlocacao.add({
+      'id': null,
+      'ch_controller': TextEditingController(),
+    });
 
     await showDialog(
       context: context,
       builder: (context) {
         return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Container(
-            width: MediaQuery.of(context).size.width * 0.9,
-            padding: const EdgeInsets.all(20),
+            width: MediaQuery.of(context).size.width * 0.85,
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.9),
             child: StatefulBuilder(builder: (context, setModalState) {
-              return SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Lançamento em Lote',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade700,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        topRight: Radius.circular(12),
                       ),
                     ),
-                    const SizedBox(height: 20),
-
-                    // CAMPO SEMESTRE
-                    TextField(
-                      controller: semestreController,
-                      decoration: InputDecoration(
-                        labelText: 'Semestre',
-                        hintText: 'Ex: 2024.1',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: PopupMenuButton<String>(
-                          icon: const Icon(Icons.arrow_drop_down),
-                          onSelected: (String value) {
-                            semestreController.text = value;
-                            setModalState(() {});
-                          },
-                          itemBuilder: (BuildContext context) {
-                            return semestres
-                                .map((semestre) => PopupMenuItem<String>(
-                                      value: semestre['display'],
-                                      child: Text(semestre['display']),
-                                    ))
-                                .toList();
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    const Text(
-                      'Disciplina:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () async {
-                        final selecionada =
-                            await _abrirDialogSelecaoDisciplina();
-                        if (selecionada != null) {
-                          setModalState(() {
-                            disciplinaId = selecionada['id'];
-                            disciplinaDados = selecionada;
-                          });
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 15),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                disciplinaDados != null
-                                    ? _getNomeDisciplinaDisplay(
-                                        disciplinaDados!)
-                                    : 'Selecione uma disciplina...',
-                                style: TextStyle(
-                                  color: disciplinaDados != null
-                                      ? Colors.black
-                                      : Colors.grey,
-                                  fontSize: 14,
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_chart, color: Colors.white, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Lançamento em Lote',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
                                 ),
                               ),
-                            ),
-                            const Icon(Icons.search, color: Colors.grey),
-                          ],
+                              const SizedBox(height: 4),
+                              Text(
+                                'Adicione múltiplas aulas de uma vez',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white.withOpacity(0.9),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
+                  ),
 
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Professores:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 150),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: professores.length,
-                        itemBuilder: (context, index) {
-                          final professor = professores[index];
-                          return CheckboxListTile(
-                            dense: true,
-                            title: Text(professor['apelido']!),
-                            value: professoresSelecionados
-                                .contains(professor['id']),
-                            onChanged: (bool? value) {
-                              setModalState(() {
-                                if (value == true) {
-                                  professoresSelecionados.add(professor['id']!);
-                                } else {
-                                  professoresSelecionados
-                                      .remove(professor['id']!);
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Dias da Semana:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: diasSemana.map((dia) {
-                        return FilterChip(
-                          label: Text(dia),
-                          selected: horariosSelecionados.containsKey(dia),
-                          onSelected: (selected) {
-                            setModalState(() {
-                              if (selected) {
-                                horariosSelecionados[dia] = {};
-                              } else {
-                                horariosSelecionados.remove(dia);
-                              }
-                            });
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 20),
-                    ...turnos.map((turno) {
-                      return Column(
+                  // Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Horários - $turno:',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          // Semestre
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.indigo.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.indigo.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.calendar_month,
+                                        color: Colors.indigo.shade700,
+                                        size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Semestre',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: semestreController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Semestre',
+                                    hintText: 'Ex: 2024.1',
+                                    border: const OutlineInputBorder(),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 14),
+                                    suffixIcon: PopupMenuButton<String>(
+                                      icon: const Icon(Icons.arrow_drop_down),
+                                      onSelected: (String value) {
+                                        semestreController.text = value;
+                                        setModalState(() {});
+                                      },
+                                      itemBuilder: (BuildContext context) {
+                                        return semestres
+                                            .map((semestre) =>
+                                                PopupMenuItem<String>(
+                                                  value: semestre['display'],
+                                                  child:
+                                                      Text(semestre['display']),
+                                                ))
+                                            .toList();
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children:
-                                List.generate(totalHorarios[turno]!, (index) {
-                              final indice = _getIndiceGlobal(turno, index + 1);
-                              final horario = horariosPorTurno[turno]![index];
-                              return FilterChip(
-                                label: Text('$indice - $horario'),
-                                selected: _isHorarioSelecionadoLote(
-                                    horariosSelecionados, turno, indice),
-                                onSelected: (selected) {
-                                  setModalState(() {
-                                    _toggleHorarioLote(horariosSelecionados,
-                                        turno, indice, selected);
-                                  });
-                                },
-                              );
-                            }).toList(),
+
+                          const SizedBox(height: 20),
+
+                          // Disciplina
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.book,
+                                        color: Colors.blue.shade700, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Disciplina',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                InkWell(
+                                  onTap: () async {
+                                    final selecionada =
+                                        await _abrirDialogSelecaoDisciplina();
+                                    if (selecionada != null) {
+                                      setModalState(() {
+                                        disciplinaId = selecionada['id'];
+                                        disciplinaDados = selecionada;
+                                      });
+                                    }
+                                  },
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 15),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      border: Border.all(
+                                          color: Colors.grey.shade400),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            disciplinaDados != null
+                                                ? _getNomeDisciplinaDisplay(
+                                                    disciplinaDados!)
+                                                : 'Selecione uma disciplina...',
+                                            style: TextStyle(
+                                              color: disciplinaDados != null
+                                                  ? Colors.black
+                                                  : Colors.grey,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        const Icon(Icons.search,
+                                            color: Colors.grey),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 16),
+
+                          const SizedBox(height: 20),
+
+                          // Docentes e Carga Horária
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.person,
+                                        color: Colors.green.shade700, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Docentes e Carga Horária',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                ...List.generate(professoresAlocacao.length,
+                                    (index) {
+                                  final prof = professoresAlocacao[index];
+                                  final chValue = double.tryParse(
+                                          prof['ch_controller'].text) ??
+                                      0;
+                                  final horasAula = chValue / 15;
+
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    elevation: 2,
+                                    color: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      side: BorderSide(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12.0),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            flex: 3,
+                                            child:
+                                                DropdownButtonFormField<String>(
+                                              value: prof['id'],
+                                              decoration: const InputDecoration(
+                                                labelText: 'Docente',
+                                                border: OutlineInputBorder(),
+                                                contentPadding:
+                                                    EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 14),
+                                              ),
+                                              isExpanded: true,
+                                              items: professores
+                                                  .map((p) =>
+                                                      DropdownMenuItem<String>(
+                                                        value: p['id'],
+                                                        child: Text(
+                                                            p['apelido'],
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis),
+                                                      ))
+                                                  .toList(),
+                                              onChanged: (v) => setModalState(
+                                                  () => prof['id'] = v),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            flex: 1,
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                TextFormField(
+                                                  controller:
+                                                      prof['ch_controller'],
+                                                  decoration:
+                                                      const InputDecoration(
+                                                    labelText: 'CH',
+                                                    border:
+                                                        OutlineInputBorder(),
+                                                    contentPadding:
+                                                        EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 14),
+                                                    suffixText: 'h',
+                                                  ),
+                                                  keyboardType:
+                                                      TextInputType.number,
+                                                  onChanged: (_) =>
+                                                      setModalState(() {}),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  '${horasAula.toStringAsFixed(1)} h.a.',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.blue.shade700,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (professoresAlocacao.length > 1)
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.delete_outline,
+                                                  color: Colors.red,
+                                                  size: 22),
+                                              onPressed: () =>
+                                                  _removerProfessor(
+                                                      index, setModalState),
+                                              tooltip: 'Remover',
+                                            )
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () =>
+                                      _adicionarProfessor(setModalState),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text(
+                                      'Adicionar Professor (Co-docência)'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.green.shade700,
+                                    side: BorderSide(
+                                        color: Colors.green.shade300),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Dias e Horários (Grid)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.purple.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.grid_on,
+                                        color: Colors.purple.shade700,
+                                        size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Dias e Horários',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Selecione os dias e horários específicos para as aulas',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                // Chips de seleção de dias
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: diasSemana.map((dia) {
+                                    final temDiaSelecionado =
+                                        _temDiaSelecionadoLote(
+                                            horariosSelecionados, dia);
+                                    return FilterChip(
+                                      label: Text(dia),
+                                      selected: temDiaSelecionado,
+                                      selectedColor: Colors.purple.shade300,
+                                      checkmarkColor: Colors.white,
+                                      onSelected: (selected) {
+                                        setModalState(() {
+                                          _toggleDiaCompletoLote(
+                                              horariosSelecionados,
+                                              dia,
+                                              selected);
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                                const SizedBox(height: 12),
+                                // Grid de horários
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border:
+                                        Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: Table(
+                                    border: TableBorder.all(
+                                        color: Colors.grey.shade200),
+                                    columnWidths: const {
+                                      0: FixedColumnWidth(50), // Label turno
+                                    },
+                                    children: [
+                                      // Header Dias
+                                      TableRow(
+                                        decoration: BoxDecoration(
+                                            color: Colors.grey.shade50),
+                                        children: [
+                                          const Padding(
+                                              padding: EdgeInsets.all(4),
+                                              child: Text('')),
+                                          ...diasSemana.map((d) => Padding(
+                                                padding:
+                                                    const EdgeInsets.all(8.0),
+                                                child: Text(
+                                                  d.substring(0, 3),
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 11,
+                                                    color: _temDiaSelecionadoLote(
+                                                            horariosSelecionados,
+                                                            d)
+                                                        ? Colors.black
+                                                        : Colors.grey,
+                                                  ),
+                                                ),
+                                              )),
+                                        ],
+                                      ),
+                                      // Manhã
+                                      ..._buildTurnoRowsLote('Manhã', 'M', 5,
+                                          horariosSelecionados, setModalState),
+                                      // Tarde
+                                      ..._buildTurnoRowsLote('Tarde', 'T', 5,
+                                          horariosSelecionados, setModalState),
+                                      // Noite
+                                      ..._buildTurnoRowsLote('Noite', 'N', 4,
+                                          horariosSelecionados, setModalState),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
-                      );
-                    }).toList(),
-                    const SizedBox(height: 20),
-                    Row(
+                      ),
+                    ),
+                  ),
+
+                  // Footer
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      border:
+                          Border(top: BorderSide(color: Colors.grey.shade300)),
+                    ),
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
                           child: const Text('Cancelar'),
                         ),
-                        const SizedBox(width: 10),
-                        ElevatedButton(
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
                           onPressed: () async {
                             if (disciplinaId == null ||
-                                professoresSelecionados.isEmpty ||
+                                professoresAlocacao
+                                    .any((p) => p['id'] == null) ||
                                 horariosSelecionados.isEmpty ||
                                 semestreController.text.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -825,20 +1224,38 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                               return;
                             }
 
+                            // Converter professoresAlocacao para o formato esperado
+                            List<String> professoresIds = professoresAlocacao
+                                .map((p) => p['id'] as String)
+                                .toList();
+
                             await _salvarLancamentoLote(
                               disciplinaId!,
-                              professoresSelecionados,
+                              professoresIds,
                               horariosSelecionados,
                               semestreController.text,
                             );
+
+                            // Limpar controllers
+                            for (var prof in professoresAlocacao) {
+                              prof['ch_controller'].dispose();
+                            }
+
                             if (mounted) Navigator.pop(context);
                           },
-                          child: const Text('Salvar'),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Confirmar Lançamento'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
             }),
           ),
@@ -860,41 +1277,120 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
     }
   }
 
-  bool _isHorarioSelecionadoLote(
-      Map<String, Map<String, List<int>>> horariosSelecionados,
-      String turno,
-      int indiceGlobal) {
-    for (var entry in horariosSelecionados.entries) {
-      final turnosDoDia = entry.value;
-      if (turnosDoDia.containsKey(turno) &&
-          turnosDoDia[turno]!.contains(indiceGlobal)) {
-        return true;
-      }
-    }
-    return false;
+  // Verifica se um dia tem algum horário selecionado
+  bool _temDiaSelecionadoLote(
+      Map<String, Map<String, List<int>>> horariosSelecionados, String dia) {
+    final slots = horariosSelecionados[dia];
+    if (slots == null) return false;
+    return slots.values.any((list) => list.isNotEmpty);
   }
 
-  void _toggleHorarioLote(
+  // Toggle de um dia completo (seleciona/desseleciona todos os horários do dia)
+  void _toggleDiaCompletoLote(
       Map<String, Map<String, List<int>>> horariosSelecionados,
-      String turno,
-      int indiceGlobal,
+      String dia,
       bool selected) {
-    for (var dia in horariosSelecionados.keys.toList()) {
-      if (selected) {
-        if (horariosSelecionados.containsKey(dia)) {
-          if (!horariosSelecionados[dia]!.containsKey(turno)) {
-            horariosSelecionados[dia]![turno] = [];
-          }
-          if (!horariosSelecionados[dia]![turno]!.contains(indiceGlobal)) {
-            horariosSelecionados[dia]![turno]!.add(indiceGlobal);
-          }
-        }
-      } else {
-        horariosSelecionados[dia]?[turno]?.remove(indiceGlobal);
-        if (horariosSelecionados[dia]?[turno]?.isEmpty ?? false) {
-          horariosSelecionados[dia]!.remove(turno);
-        }
+    if (selected) {
+      if (!horariosSelecionados.containsKey(dia)) {
+        horariosSelecionados[dia] = {};
       }
+    } else {
+      horariosSelecionados.remove(dia);
+    }
+  }
+
+  // Constrói as linhas da tabela para um turno específico
+  List<TableRow> _buildTurnoRowsLote(
+    String labelTurno,
+    String prefixo,
+    int qtd,
+    Map<String, Map<String, List<int>>> horariosSelecionados,
+    StateSetter setModalState,
+  ) {
+    List<TableRow> rows = [];
+    for (int i = 1; i <= qtd; i++) {
+      final slot = '$prefixo$i';
+      rows.add(TableRow(
+        children: [
+          TableCell(
+            verticalAlignment: TableCellVerticalAlignment.middle,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              color: _getCorTurno(labelTurno).withOpacity(0.1),
+              child: Text(
+                slot,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          ...diasSemana.map((dia) {
+            final diaHabilitado = horariosSelecionados.containsKey(dia);
+
+            // Verifica se este slot específico está selecionado
+            bool slotSelecionado = false;
+            if (diaHabilitado &&
+                horariosSelecionados[dia]!.containsKey(labelTurno)) {
+              final indiceGlobal = _getIndiceGlobal(labelTurno, i);
+              slotSelecionado = horariosSelecionados[dia]![labelTurno]!
+                  .contains(indiceGlobal);
+            }
+
+            return TableCell(
+              verticalAlignment: TableCellVerticalAlignment.middle,
+              child: InkWell(
+                onTap: diaHabilitado
+                    ? () {
+                        setModalState(() {
+                          final indiceGlobal = _getIndiceGlobal(labelTurno, i);
+                          if (!horariosSelecionados[dia]!
+                              .containsKey(labelTurno)) {
+                            horariosSelecionados[dia]![labelTurno] = [];
+                          }
+                          if (slotSelecionado) {
+                            horariosSelecionados[dia]![labelTurno]!
+                                .remove(indiceGlobal);
+                          } else {
+                            horariosSelecionados[dia]![labelTurno]!
+                                .add(indiceGlobal);
+                          }
+                        });
+                      }
+                    : null,
+                child: Container(
+                  height: 32,
+                  color: !diaHabilitado
+                      ? Colors.grey.shade100
+                      : slotSelecionado
+                          ? _getCorTurno(labelTurno).withOpacity(0.6)
+                          : Colors.white,
+                  child: Center(
+                    child: slotSelecionado
+                        ? Icon(Icons.check, size: 16, color: Colors.white)
+                        : null,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ));
+    }
+    return rows;
+  }
+
+  // Retorna a cor para cada turno
+  Color _getCorTurno(String turno) {
+    switch (turno) {
+      case 'Manhã':
+        return Colors.orange;
+      case 'Tarde':
+        return Colors.blue;
+      case 'Noite':
+        return Colors.indigo;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -976,6 +1472,17 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
     final key = '$dia-$turno-$indice';
     final aulas = grade[key] ?? [];
 
+    // Se já existem aulas, mostrar opções
+    if (aulas.isNotEmpty) {
+      await _visualizarAulasExistentes(dia, turno, indice, aulas);
+    } else {
+      // Se não há aulas, abrir diretamente o diálogo de adição
+      await _abrirDialogAdicaoDetalhada(dia, turno, indice);
+    }
+  }
+
+  Future<void> _visualizarAulasExistentes(String dia, String turno, int indice,
+      List<Map<String, dynamic>> aulas) async {
     await showDialog(
       context: context,
       builder: (context) {
@@ -994,59 +1501,52 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                aulas.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text('Nenhuma aula neste horário'),
-                      )
-                    : SizedBox(
-                        height: 200,
-                        child: ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: aulas.length,
-                          itemBuilder: (context, index) {
-                            final aula = aulas[index];
-                            final disciplinaSigla = _getSiglaDisciplina(
-                                aula['disciplina_nome'] ?? '');
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              child: ListTile(
-                                title: Text(
-                                  '$disciplinaSigla - ${aula['disciplina_nome_extenso'] ?? aula['disciplina_nome'] ?? ''}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Professores: ${(aula['professores_nomes'] as List).join(', ')}',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                    Text(
-                                      'Semestre: ${aula['semestre'] ?? 'N/A'}',
-                                      style: const TextStyle(
-                                          fontSize: 11, color: Colors.grey),
-                                    ),
-                                  ],
-                                ),
-                                trailing: _usuarioPodeEditar()
-                                    ? IconButton(
-                                        icon: const Icon(Icons.delete,
-                                            color: Colors.red),
-                                        onPressed: () async {
-                                          await _excluirAula(aula['id']);
-                                          Navigator.pop(context);
-                                          _abrirDialogEdicaoAula(
-                                              dia, turno, indice);
-                                        },
-                                      )
-                                    : const SizedBox.shrink(),
+                SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: aulas.length,
+                    itemBuilder: (context, index) {
+                      final aula = aulas[index];
+                      final disciplinaSigla =
+                          _getSiglaDisciplina(aula['disciplina_nome'] ?? '');
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          title: Text(
+                            '$disciplinaSigla - ${aula['disciplina_nome_extenso'] ?? aula['disciplina_nome'] ?? ''}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Professores: ${(aula['professores_nomes'] as List).join(', ')}',
+                                style: const TextStyle(fontSize: 12),
                               ),
-                            );
-                          },
+                              Text(
+                                'Semestre: ${aula['semestre'] ?? 'N/A'}',
+                                style: const TextStyle(
+                                    fontSize: 11, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          trailing: _usuarioPodeEditar()
+                              ? IconButton(
+                                  icon: const Icon(Icons.delete,
+                                      color: Colors.red),
+                                  onPressed: () async {
+                                    await _excluirAula(aula['id']);
+                                    Navigator.pop(context);
+                                    _abrirDialogEdicaoAula(dia, turno, indice);
+                                  },
+                                )
+                              : const SizedBox.shrink(),
                         ),
-                      ),
+                      );
+                    },
+                  ),
+                ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -1060,7 +1560,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                       ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          _abrirDialogIndividual(dia, turno, indice);
+                          _abrirDialogAdicaoDetalhada(dia, turno, indice);
                         },
                         child: const Text('Adicionar Aula'),
                       ),
@@ -1073,6 +1573,99 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
         );
       },
     );
+  }
+
+  Future<void> _abrirDialogAdicaoDetalhada(
+      String dia, String turno, int indice) async {
+    final resultado = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => DialogLancamentoGrade(
+        dia: dia,
+        turno: turno,
+        indice: indice,
+        disciplinas: disciplinas,
+        professores: professores,
+        semestre: semestreAtual,
+      ),
+    );
+
+    if (resultado != null && mounted) {
+      await _salvarLancamentoDetalhado(resultado);
+    }
+  }
+
+  Future<void> _salvarLancamentoDetalhado(Map<String, dynamic> dados) async {
+    try {
+      final disciplinaId = dados['disciplina_id'] as String;
+      final professores = dados['professores'] as List<Map<String, dynamic>>;
+      final semestre = dados['semestre'] as String;
+
+      // Consolidar slots por dia-turno-indice
+      final Map<String, Map<String, dynamic>> consolidated = {};
+
+      for (var prof in professores) {
+        final docenteId = prof['docente_id'] as String;
+        final List<dynamic> slots = prof['slots'] ?? [];
+
+        for (var slot in slots) {
+          if (slot is String && slot.contains('-')) {
+            final parts = slot.split('-'); // [Seg, M1]
+            if (parts.length >= 2) {
+              final dia = parts[0];
+              final timeCode = parts[1]; // M1
+
+              final turnoLetra = timeCode[0]; // M
+              final indiceStr = timeCode.substring(1); // 1
+              final indice = int.tryParse(indiceStr) ?? 0;
+
+              String turno = 'Manhã';
+              if (turnoLetra == 'T') turno = 'Tarde';
+              if (turnoLetra == 'N') turno = 'Noite';
+
+              final compositeKey = '$dia-$turno-$indice-$disciplinaId';
+
+              if (!consolidated.containsKey(compositeKey)) {
+                consolidated[compositeKey] = {
+                  'semestre': semestre,
+                  'dia': dia,
+                  'turno': turno,
+                  'indice': indice,
+                  'disciplina_id': disciplinaId,
+                  'professores': [],
+                };
+              }
+
+              final List listProfs = consolidated[compositeKey]!['professores'];
+              if (!listProfs.contains(docenteId)) {
+                listProfs.add(docenteId);
+              }
+            }
+          }
+        }
+      }
+
+      // Inserir no banco
+      final inserts = consolidated.values.toList();
+
+      if (inserts.isNotEmpty) {
+        await supabase.from('grade_aulas').insert(inserts);
+        await _loadGrade();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content:
+                    Text('${inserts.length} aula(s) salva(s) com sucesso!')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao salvar: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _excluirAula(String aulaId) async {
@@ -1631,7 +2224,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
 
   void _onHorarioTap(String dia, String turno, int indice) {
     if (_usuarioPodeEditar()) {
-      _abrirDialogEdicaoAula(dia, turno, _getIndiceNoTurno(indice));
+      _abrirDialogEdicaoAula(dia, turno, indice);
     } else {
       _mostrarMensagemAcessoNegado();
     }
@@ -1645,9 +2238,19 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
 
     return Scaffold(
       appBar: AppBar(
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.blue.shade800, Colors.indigo.shade900],
+            ),
+          ),
+        ),
         title: Row(
           children: [
-            const Text('Grade de Aulas'),
+            const Text('Grade de Aulas',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(width: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1658,7 +2261,8 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_today, size: 16),
+                  const Icon(Icons.calendar_today,
+                      size: 16, color: Colors.white),
                   const SizedBox(width: 6),
                   _isLoadingSemestre
                       ? Container(
@@ -1705,7 +2309,9 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
             ),
           ],
         ),
-        backgroundColor: Colors.blue.shade700,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -1768,13 +2374,23 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                     margin: const EdgeInsets.all(4),
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
-                                      color: Colors.indigo.shade50,
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.indigo.shade50,
+                                          Colors.indigo.shade100,
+                                        ],
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                          color: Colors.indigo.shade200
+                                              .withOpacity(0.5)),
                                       boxShadow: [
                                         BoxShadow(
                                           color: Colors.black.withOpacity(0.05),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 2),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4),
                                         ),
                                       ],
                                     ),
@@ -1793,14 +2409,24 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                       margin: const EdgeInsets.all(4),
                                       alignment: Alignment.center,
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            Colors.blue.shade50,
+                                            Colors.blue.shade100,
+                                          ],
+                                        ),
                                         borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: Colors.blue.shade200
+                                                .withOpacity(0.5)),
                                         boxShadow: [
                                           BoxShadow(
                                             color:
                                                 Colors.black.withOpacity(0.05),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
                                           ),
                                         ],
                                       ),
@@ -1835,18 +2461,27 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
                                           color: Colors.white,
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: [
+                                              Colors.grey.shade50,
+                                              Colors.grey.shade100,
+                                            ],
+                                          ),
                                           borderRadius:
                                               BorderRadius.circular(12),
                                           boxShadow: [
                                             BoxShadow(
                                               color: Colors.black
-                                                  .withOpacity(0.03),
-                                              blurRadius: 3,
-                                              offset: const Offset(0, 1),
+                                                  .withOpacity(0.04),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 2),
                                             ),
                                           ],
                                           border: Border.all(
-                                              color: Colors.grey.shade200),
+                                              color: Colors.grey.shade100,
+                                              width: 1.5),
                                         ),
                                         child: Column(
                                           mainAxisAlignment:
@@ -1921,23 +2556,34 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                                 color: aulas.isEmpty
                                                     ? Colors.white
                                                     : _getTurnoColor(turno)
-                                                        .withOpacity(0.3),
+                                                        .withOpacity(0.15),
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 border: Border.all(
                                                   color: aulas.isEmpty
                                                       ? Colors.grey.shade200
                                                       : _getTurnoColor(turno)
-                                                          .withOpacity(0.6),
-                                                  width: 1,
+                                                          .withOpacity(0.4),
+                                                  width: 1.5,
                                                 ),
                                                 boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withOpacity(0.03),
-                                                    blurRadius: 3,
-                                                    offset: const Offset(0, 1),
-                                                  ),
+                                                  if (aulas.isNotEmpty)
+                                                    BoxShadow(
+                                                      color:
+                                                          _getTurnoColor(turno)
+                                                              .withOpacity(0.2),
+                                                      blurRadius: 8,
+                                                      offset:
+                                                          const Offset(0, 3),
+                                                    )
+                                                  else
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withOpacity(0.03),
+                                                      blurRadius: 4,
+                                                      offset:
+                                                          const Offset(0, 2),
+                                                    ),
                                                 ],
                                               ),
                                               child: _buildAulaContent(aulas),
@@ -2070,7 +2716,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
-                                    '${ch.toStringAsFixed(1)} h',
+                                    '${ch.toStringAsFixed(1)} h.a. (${(ch * 15).toStringAsFixed(0)}h)',
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: isDisciplina
@@ -2134,7 +2780,7 @@ class _GradeAulasPageState extends State<GradeAulasPage> {
                                         Border.all(color: Colors.blue.shade100),
                                   ),
                                   child: Text(
-                                    '${cargaHoraria.toStringAsFixed(1)}h',
+                                    '${cargaHoraria.toStringAsFixed(1)} h.a. (${(cargaHoraria * 15).toStringAsFixed(0)}h)',
                                     style: TextStyle(
                                       color: Colors.blue.shade700,
                                       fontWeight: FontWeight.bold,

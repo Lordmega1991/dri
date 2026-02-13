@@ -160,15 +160,19 @@ class CardPeriodoWidget extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildItemResumo('CH Total', '${chTotal.toStringAsFixed(1)}h',
+          _buildItemResumo(
+              'CH Total',
+              '${chTotal.toStringAsFixed(0)}h (${(chTotal / 15).toStringAsFixed(1)}a)',
               const Color(0xFF64748B)),
           _buildVerticalDividerSimple(),
-          _buildItemResumo('Alocada', '${chAlocada.toStringAsFixed(1)}h',
+          _buildItemResumo(
+              'Alocada',
+              '${chAlocada.toStringAsFixed(0)}h (${(chAlocada / 15).toStringAsFixed(1)}a)',
               const Color(0xFF3B82F6)),
           _buildVerticalDividerSimple(),
           _buildItemResumo(
             'Restante',
-            '${chRestante.toStringAsFixed(1)}h',
+            '${chRestante.toStringAsFixed(0)}h (${(chRestante / 15).toStringAsFixed(1)}a)',
             chRestante > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981),
           ),
         ],
@@ -376,7 +380,7 @@ class CardPeriodoWidget extends StatelessWidget {
                                   ),
                                 ),
                               Text(
-                                '${aloc['ch_alocada']}h',
+                                '${aloc['ch_alocada']}h (${(aloc['ch_alocada'] / 15).toStringAsFixed(1)}a)',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,

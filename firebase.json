@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "build/web",
+    "public": "dri_web/out",
     "ignore": [
       "firebase.json",
       "**/.*",
