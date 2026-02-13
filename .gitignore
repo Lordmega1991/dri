@@ -47,3 +47,5 @@ app.*.map.json
 node_modules/
 
 assets/service_account.json
+
+assets/credentials.json
