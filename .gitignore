@@ -45,3 +45,5 @@ app.*.map.json
 /android/app/release
 
 node_modules/
+
+assets/service_account.json
