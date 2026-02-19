@@ -496,6 +496,7 @@ function GradeContent() {
     const [sidebarSortBy, setSidebarSortBy] = useState<'apelido' | 'ch'>('apelido')
     const [importing, setImporting] = useState(false)
     const [userAccessLevel, setUserAccessLevel] = useState<number | null>(null)
+    const [semestreLabel, setSemestreLabel] = useState<string>('')
 
     useEffect(() => {
         const checkAccess = async () => {
@@ -517,6 +518,18 @@ function GradeContent() {
             }
 
             setUserAccessLevel(accessData.access_level)
+
+            // Buscando o label amigável do semestre
+            const { data: semData } = await supabase
+                .from('semestres')
+                .select('ano, semestre')
+                .eq('id', semestreId)
+                .single()
+
+            if (semData) {
+                setSemestreLabel(`${semData.ano}.${semData.semestre}`)
+            }
+
             fetchAllData()
         }
         checkAccess()
@@ -585,13 +598,19 @@ function GradeContent() {
                 const ch = aloc.ch_alocada || 0
                 profSum.totalCH += ch
 
+                // Find co-teachers for this discipline
+                const coDocentes = alocRes.data?.filter((a: any) =>
+                    a.disciplina_id === aloc.disciplina_id && a.docente_id !== profId
+                ).map((a: any) => a.docentes?.apelido || a.docentes?.nome).filter(Boolean) || []
+
                 profSum.atividades.push({
                     tipo: 'disciplina',
                     nome: disc?.nome || '?',
                     nomeExtenso: disc?.nome_extenso || disc?.nome || '?',
                     ch: ch,
                     turno: aloc.turno || '-',
-                    dias: aloc.dias || []
+                    dias: aloc.dias || [],
+                    coDocentes: coDocentes
                 })
             })
 
@@ -708,13 +727,19 @@ function GradeContent() {
                 const ch = aloc.ch_alocada || 0
                 profSum.totalCH += ch
 
+                // Find co-teachers for this simulation discipline
+                const coDocentes = alocacoes.filter((a: any) =>
+                    a.disciplina_id === aloc.disciplina_id && a.docente_id !== profId
+                ).map((a: any) => a.docentes?.apelido || a.docentes?.nome).filter(Boolean) || []
+
                 profSum.atividades.push({
                     tipo: 'disciplina',
                     nome: disc?.nome || '?',
                     nomeExtenso: disc?.nome_extenso || disc?.nome || '?',
                     ch: ch,
                     turno: aloc.turno,
-                    dias: aloc.dias || []
+                    dias: aloc.dias || [],
+                    coDocentes: coDocentes
                 })
             })
 
@@ -735,8 +760,8 @@ function GradeContent() {
     }
 
     const importSimulationToGrade = async () => {
-        if (!selectedSimulacao) {
-            alert('Selecione uma simulação primeiro')
+        if (!selectedSimulacao || selectedSimulacao === 'grade_oficial') {
+            alert('Selecione uma simulação no menu ao lado primeiro')
             return
         }
 
@@ -819,16 +844,30 @@ function GradeContent() {
             console.log('Alocações únicas:', alocacoesMap.size)
 
             // Insert or update alocacoes_docentes for this semester
-            const alocacoesArray = Array.from(alocacoesMap.values())
+            const alocacoesArray = Array.from(alocacoesMap.values()).map(aloc => ({
+                ...aloc,
+                simulacao_id: null // When importing TO the grade, it becomes the official record (null)
+            }))
 
-            // First, delete existing allocations for this semester to avoid duplicates
+            // Clear previous OFFICIAL grade data (where simulacao_id is null) for this semester
             const { error: deleteError } = await supabase
                 .from('alocacoes_docentes')
                 .delete()
                 .eq('semestre', semestreId)
+                .is('simulacao_id', null)
 
             if (deleteError) {
-                console.warn('Aviso ao limpar alocações antigas:', deleteError)
+                console.warn('Aviso ao limpar alocações oficiais antigas:', deleteError)
+            }
+
+            // Clear previous grade_aulas entries to prevent duplicates
+            const { error: gradeDeleteError } = await supabase
+                .from('grade_aulas')
+                .delete()
+                .eq('semestre', semestreId)
+
+            if (gradeDeleteError) {
+                console.warn('Aviso ao limpar grade antiga:', gradeDeleteError)
             }
 
             // Insert new allocations
@@ -843,27 +882,35 @@ function GradeContent() {
 
             console.log('Alocações inseridas com sucesso')
 
-            // Convert allocations to grade entries
-            const gradeEntries: any[] = []
+            // Convert allocations to grade entries (grouping by slot + discipline)
+            const groupedEntries = new Map<string, any>()
+
             alocacoes.forEach((aloc: any) => {
-                const prof = profsMap.get(aloc.docente_id)
-                const disc = discsMap.get(aloc.disciplina_id)
-                const dias = aloc.dias || []
                 const slots = aloc.slots || []
 
-                // Map each day-slot combination to a grade entry
-                dias.forEach((dia: string, index: number) => {
-                    const slot = slots[index]
-                    if (!slot) return
+                slots.forEach((slot: string) => {
+                    if (!slot || !slot.includes('-')) return
 
-                    // Extract time from slot (e.g., "Seg-M1" -> "M1")
-                    const slotCode = slot.split('-')[1]
+                    const parts = slot.split('-')
+                    const dia = parts[0]
+                    const slotCode = parts[1]
+
                     const horario = mapSlotToHorario(slotCode)
+                    if (!horario) return
+
                     const turno = slotCode.startsWith('M') ? 'Manhã' : slotCode.startsWith('T') ? 'Tarde' : 'Noite'
                     const indice = parseInt(slotCode.substring(1)) - 1
 
-                    if (horario) {
-                        gradeEntries.push({
+                    // Create a unique key for grouping: dia-turno-indice-disciplina
+                    const key = `${dia}-${turno}-${indice}-${aloc.disciplina_id}`
+
+                    if (groupedEntries.has(key)) {
+                        const existing = groupedEntries.get(key)
+                        if (!existing.professores.includes(aloc.docente_id)) {
+                            existing.professores.push(aloc.docente_id)
+                        }
+                    } else {
+                        groupedEntries.set(key, {
                             semestre: semestreId,
                             dia: dia,
                             turno: turno,
@@ -875,7 +922,8 @@ function GradeContent() {
                 })
             })
 
-            console.log('Entradas de grade geradas:', gradeEntries.length)
+            const gradeEntries = Array.from(groupedEntries.values())
+            console.log('Entradas de grade agrupadas geradas:', gradeEntries.length)
 
             if (gradeEntries.length === 0) {
                 alert('Nenhuma entrada válida para importar')
@@ -1042,7 +1090,7 @@ function GradeContent() {
             doc.setFontSize(8)
             doc.setTextColor(117, 117, 117)
             doc.setFont('helvetica', 'italic')
-            doc.text(`Semestre: ${semestreId} | DRI-SISTEMA`, pageWidth - 14, 12, { align: 'right' })
+            doc.text(`Semestre: ${semestreLabel || semestreId} | DRI-SISTEMA`, pageWidth - 14, 12, { align: 'right' })
 
             doc.setTextColor(0, 0, 0)
             doc.setFont('helvetica', 'normal')
@@ -1399,7 +1447,7 @@ function GradeContent() {
                                 <Calendar size={20} className="text-indigo-600" />
                                 Grade de Horários
                             </h1>
-                            <p className="text-xs text-gray-500 font-medium">Semestre {semestreId}</p>
+                            <p className="text-xs text-gray-500 font-medium">Semestre {semestreLabel || semestreId}</p>
                         </div>
                     </div>
 
@@ -1422,7 +1470,7 @@ function GradeContent() {
                                 {userAccessLevel !== 2 && (
                                     <button
                                         onClick={importSimulationToGrade}
-                                        disabled={importing}
+                                        disabled={importing || selectedSimulacao === 'grade_oficial'}
                                         className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-sm font-medium flex items-center disabled:opacity-50"
                                         title="Importar simulação para a grade"
                                     >
@@ -1564,7 +1612,10 @@ function GradeContent() {
                                                             <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="font-bold text-slate-700 leading-snug">
-                                                                    {atv.nomeExtenso}
+                                                                    {atv.nome}
+                                                                    {atv.coDocentes && atv.coDocentes.length > 0 && (
+                                                                        <span className="text-indigo-600 font-semibold text-[0.9em]"> - {atv.coDocentes.join(', ')}</span>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                             <div className="bg-slate-50 text-slate-600 px-1.5 py-0.5 rounded font-bold text-[9px] whitespace-nowrap lg:flex gap-1 hidden">
@@ -1622,9 +1673,26 @@ function GradeContent() {
                                         {/* Colunas de Dias */}
                                         {DIAS.map(dia => {
                                             // Find all classes for this day and time slot
-                                            const aulas = grade.filter(g =>
+                                            const rawAulas = grade.filter(g =>
                                                 g.dia === dia && g.horario === horario
                                             )
+
+                                            // Group by discipline to merge co-teachers who might be in separate rows
+                                            const groupedAulasMap = new Map<string, any>()
+                                            rawAulas.forEach(a => {
+                                                const key = a.disciplina_id
+                                                if (groupedAulasMap.has(key)) {
+                                                    const existing = groupedAulasMap.get(key)
+                                                    // Merge professor strings safely
+                                                    const existingProfs = existing.professor ? existing.professor.split(', ') : []
+                                                    const newProfs = a.professor ? a.professor.split(', ') : []
+                                                    const merged = Array.from(new Set([...existingProfs, ...newProfs]))
+                                                    existing.professor = merged.join(', ')
+                                                } else {
+                                                    groupedAulasMap.set(key, { ...a })
+                                                }
+                                            })
+                                            const aulas = Array.from(groupedAulasMap.values())
 
                                             const colorClass = selectedTurno === 'Manhã' ? 'bg-amber-50 border-amber-200 text-amber-900' :
                                                 selectedTurno === 'Tarde' ? 'bg-orange-50 border-orange-200 text-orange-900' :
@@ -1643,10 +1711,16 @@ function GradeContent() {
                                                     {aulas.length > 0 ? (
                                                         <div className="space-y-1 h-full overflow-y-auto">
                                                             {aulas.map((aula, aulaIdx) => (
-                                                                <div key={aulaIdx} className={clsx("border rounded-md p-1.5 shadow-sm hover:shadow transition-shadow", colorClass)}>
-                                                                    <div className="font-semibold text-[9px] leading-snug" style={{ fontFamily: 'Inter, sans-serif' }} title={`${aula.disciplina_nome} - ${aula.professor}`}>
-                                                                        <span className="text-gray-900">{aula.disciplina_nome || aula.disciplina}</span>
-                                                                        <span className={clsx("ml-1", subTextColor)}>- {aula.professor}</span>
+                                                                <div key={aulaIdx} className={clsx("border-l-2 rounded-r-md p-2 shadow-sm hover:shadow-md transition-all", colorClass)}>
+                                                                    <div className="font-bold text-[10px] leading-tight flex flex-col gap-0.5" title={`${aula.disciplina_nome_extenso || aula.disciplina_nome} - ${aula.professor}`}>
+                                                                        <div className="text-slate-900 uppercase tracking-tighter">
+                                                                            {aula.disciplina_nome}
+                                                                        </div>
+                                                                        <div className={clsx("font-medium italic opacity-90 break-words leading-tight flex flex-col", subTextColor)}>
+                                                                            {aula.professor.split(', ').map((p: string, pIdx: number) => (
+                                                                                <span key={pIdx}>{p}</span>
+                                                                            ))}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             ))}

@@ -40,6 +40,7 @@ function SimulacaoContent() {
 
     // Tab State
     const [activePeriodo, setActivePeriodo] = useState<string>('')
+    const [semestreLabel, setSemestreLabel] = useState<string>('')
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -83,6 +84,18 @@ function SimulacaoContent() {
             }
 
             setUserAccessLevel(accessData.access_level)
+
+            // Fetch semester label
+            const { data: semData } = await supabase
+                .from('semestres')
+                .select('ano, semestre')
+                .eq('id', semestreId)
+                .single()
+
+            if (semData) {
+                setSemestreLabel(`${semData.ano}.${semData.semestre}`)
+            }
+
             fetchSimulations()
         }
         checkAccess()
@@ -486,12 +499,12 @@ function SimulacaoContent() {
             doc.setFontSize(10)
             doc.setFont('helvetica', 'normal')
             const currentSimName = simulacoes.find(s => s.id === activeSimulacaoId)?.nome || 'Simulação'
-            doc.text(`Semestre: ${semestreId} | Cenário: ${currentSimName}`, 105, 29, { align: 'center' })
+            doc.text(`Semestre: ${semestreLabel || semestreId} | Cenário: ${currentSimName}`, 105, 29, { align: 'center' })
 
             if (pageTitle) {
                 doc.setFontSize(11)
                 doc.setFont('helvetica', 'bold')
-                doc.text(pageTitle, 14, 38)
+                doc.text(pageTitle.replace('ºº', 'º'), 14, 38)
             }
         }
 
@@ -785,9 +798,9 @@ function SimulacaoContent() {
                             <Link href="/semestre" className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
                                 <ArrowLeft size={20} />
                             </Link>
-                            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2 uppercase">
                                 <BarChart2 size={20} className="text-indigo-600" />
-                                Simulação <span className="text-gray-500 font-normal text-lg ml-1">{semestreId}</span>
+                                SIMULAÇÃO <span className="text-gray-500 font-normal text-lg ml-1">{semestreLabel || semestreId}</span>
                             </h1>
                         </div>
 
@@ -945,7 +958,12 @@ function SimulacaoContent() {
                                             {!disc.isComplete && !disc.isIgnored && <div className="flex items-center text-indigo-600 text-[10px] font-bold bg-indigo-50 px-1.5 py-0.5 rounded-full">{disc.ch_aula}h</div>}
                                         </div>
 
-                                        <h3 className={clsx("font-bold leading-tight mb-1", disc.isIgnored ? "text-gray-400 line-through" : "text-gray-900")} title={disc.nome_extenso}>{disc.nome}</h3>
+                                        <h3 className={clsx("font-bold leading-tight mb-1", disc.isIgnored ? "text-gray-400 line-through" : "text-gray-900")} title={disc.nome_extenso}>
+                                            {disc.nome}
+                                            {discAlocs.length > 0 && (
+                                                <span className="text-[#6366f1] font-semibold text-[0.85em]"> - {discAlocs.map(a => a.professor?.apelido || a.professor?.nome).join(', ')}</span>
+                                            )}
+                                        </h3>
                                         {disc.nome_extenso && disc.nome_extenso !== disc.nome && <p className="text-xs text-gray-400 leading-snug mb-3 line-clamp-2">{disc.nome_extenso}</p>}
 
                                         {!disc.isIgnored && (

@@ -1,9 +1,13 @@
-// 'use server'
+'use server'
 
 export async function fetchSigaaStudents() {
     try {
         const url = 'https://sigaa.ufpb.br/sigaa/public/curso/alunos.jsf?lc=pt_br&id=1626850'
-        const response = await fetch(url)
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        })
         const html = await response.text()
 
         // Simple regex to extract names and matriculas from SIGAA table

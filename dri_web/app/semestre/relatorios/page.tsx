@@ -36,14 +36,15 @@ function RelatoriosContent() {
         setGenerating(true)
         try {
             // 1. Fetch All Data
+            const [year, period] = semestreId.split('.')
             const [gradeRes, profRes, alocRes, semRes] = await Promise.all([
                 supabase.from('grade_aulas').select('*').eq('semestre', semestreId),
                 supabase.from('docentes').select('*').eq('ativo', true).order('nome'),
-                supabase.from('alocacoes_docentes').select('*, disciplina(nome, periodo, turno)').eq('semestre', semestreId),
-                supabase.from('semestres').select('id').eq('ano', semestreId.split('.')[0]).eq('semestre', semestreId.split('.')[1]).single()
+                supabase.from('alocacoes_docentes').select('*, disciplina:disciplinas(nome, periodo, turno)').eq('semestre', semestreId).is('simulacao_id', null),
+                supabase.from('semestres').select('id').eq('ano', parseInt(year)).eq('semestre', parseInt(period)).single()
             ])
 
-            let atividades = []
+            let atividades: any[] = []
             if (semRes.data) {
                 const ativRes = await supabase
                     .from('atividades_docentes')
@@ -60,26 +61,98 @@ function RelatoriosContent() {
             // 2. Initialize PDF
             const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
-            // --- PAGE 1: GRADE GERAL ---
-            doc.setFontSize(16)
-            doc.setTextColor(COLORS.PRIMARY)
-            doc.text(`GRADE DE AULAS COMPLETA - ${semestreId}`, 14, 15)
+            // --- PROFESSIONAL HEADER HELPER ---
+            const addProfessionalHeader = (title: string, pWidth: number) => {
+                doc.setDrawColor(21, 101, 192) // Primary Blue
+                doc.setLineWidth(0.5)
+                doc.line(14, 25, pWidth - 14, 25)
 
-            // Prepare Table Data
+                doc.setFont('helvetica', 'bold')
+                doc.setFontSize(9)
+                doc.setTextColor(33, 33, 33)
+                doc.text('UNIVERSIDADE FEDERAL DA PARAÍBA', 14, 12)
+                doc.text('CENTRO DE CIÊNCIAS SOCIAIS APLICADAS', 14, 16)
+                doc.text('DEPARTAMENTO DE RELAÇÕES INTERNACIONAIS', 14, 20)
+
+                doc.setFontSize(14)
+                doc.setTextColor(21, 101, 192)
+                doc.text(title.toUpperCase(), pWidth - 14, 20, { align: 'right' })
+
+                doc.setFontSize(8)
+                doc.setTextColor(117, 117, 117)
+                doc.setFont('helvetica', 'italic')
+                doc.text(`Semestre: ${semestreId} | DRI-SISTEMA`, pWidth - 14, 12, { align: 'right' })
+
+                doc.setTextColor(0, 0, 0)
+                doc.setFont('helvetica', 'normal')
+            }
+
+            // --- PAGE 1: RESUMO E STATS ---
+            const pageWidth = doc.internal.pageSize.getWidth()
+            addProfessionalHeader('Resumo de Alocações', pageWidth)
+
+            const profsWithData = professores.map(prof => {
+                const pAlocs = alocacoes.filter(a => a.docente_id === prof.id)
+                const pAtivs = atividades.filter((a: any) => a.docente_id === prof.id)
+                const chAula = pAlocs.reduce((s, a) => s + (a.ch_alocada || 0), 0)
+                const chAdm = pAtivs.reduce((s: any, a: any) => s + (a.quantidade || 0), 0)
+                return { ...prof, pAlocs, pAtivs, chAula, chAdm, total: chAula + chAdm }
+            }).filter(p => p.total > 0).sort((a, b) => a.nome.localeCompare(b.nome))
+
+            // Stats Cards
+            const stats = [
+                { label: 'Aulas Atribuídas', value: grade.length.toString(), color: [21, 101, 192] },
+                { label: 'Docentes Ativos', value: profsWithData.length.toString(), color: [56, 142, 60] },
+                { label: 'Carga Horária Total', value: `${profsWithData.reduce((s, p) => s + p.total, 0)}h`, color: [245, 124, 0] }
+            ]
+
+            let cardX = 14
+            const cardWidth = (pageWidth - 28 - 10) / 3
+            stats.forEach(s => {
+                doc.setDrawColor(200, 200, 200)
+                doc.setFillColor(245, 245, 245)
+                doc.roundedRect(cardX, 32, cardWidth, 18, 2, 2, 'FD')
+                doc.setFontSize(7)
+                doc.setTextColor(117, 117, 117)
+                doc.text(s.label.toUpperCase(), cardX + cardWidth / 2, 38, { align: 'center' })
+                doc.setFontSize(12)
+                doc.setFont('helvetica', 'bold')
+                doc.setTextColor(s.color[0], s.color[1], s.color[2] as any)
+                doc.text(s.value, cardX + cardWidth / 2, 45, { align: 'center' })
+                cardX += cardWidth + 5
+            })
+
+            autoTable(doc, {
+                startY: 55,
+                head: [['Docente', 'CH Aula', 'CH Outras', 'Total', 'Disciplinas']],
+                body: profsWithData.map(p => [
+                    p.apelido || p.nome,
+                    `${p.chAula}h`,
+                    `${p.chAdm}h`,
+                    `${p.total}h`,
+                    p.pAlocs.map((a: any) => a.disciplina?.nome).join(', ')
+                ]),
+                theme: 'grid',
+                headStyles: { fillColor: [21, 101, 192] },
+                styles: { fontSize: 8 }
+            })
+
+            // --- PAGE 2: GRADE GERAL ---
+            doc.addPage()
+            addProfessionalHeader('Grade de Aulas', pageWidth)
+
             const tableHead = [['Horário', ...DIAS]]
             const tableBody: any[] = []
 
             TURNOS.forEach(turno => {
-                // Shift Header Row (Optional or merged)
-                // tableBody.push([{ content: turno.toUpperCase(), colSpan: 7, styles: { fillColor: COLORS.HEADER, fontStyle: 'bold', halign: 'center' } }])
-
                 HORARIOS[turno as keyof typeof HORARIOS].forEach(horario => {
                     const row: any[] = [horario]
                     DIAS.forEach(dia => {
-                        // Find Class
-                        const aula = grade.find(g => g.dia === dia && (g.horario || '').includes(horario.split('-')[0].trim()))
+                        const aula = grade.find(g => g.dia === dia && g.turno === turno && HORARIOS[turno as keyof typeof HORARIOS][g.indice] === horario)
                         if (aula) {
-                            row.push(`${aula.disciplina_nome || aula.disciplina}\n(${aula.professor})\n${aula.sala || ''}`)
+                            const profs = Array.isArray(aula.professores) ? aula.professores : []
+                            const nicknames = profs.map((pid: string) => professores.find(p => p.id === pid)?.apelido || 'Prof.').join(', ')
+                            row.push(`${aula.disciplina_nome || '?'}\n${nicknames}`)
                         } else {
                             row.push('')
                         }
@@ -96,68 +169,56 @@ function RelatoriosContent() {
             autoTable(doc, {
                 head: tableHead,
                 body: tableBody,
-                startY: 20,
-                styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-                headStyles: { fillColor: COLORS.PRIMARY, textColor: '#FFFFFF' },
+                startY: 32,
+                styles: { fontSize: 7, cellPadding: 2, minCellHeight: 15, valign: 'middle', halign: 'center' },
+                columnStyles: { 0: { fontStyle: 'bold', fillColor: '#F5F5F5', cellWidth: 25 } },
+                headStyles: { fillColor: [21, 101, 192], textColor: '#FFFFFF' },
                 theme: 'grid'
             })
 
-            // --- PAGE 2+: DETALHES DOS DOCENTES ---
-            doc.addPage() // Portrait for details
-            // doc.setPageOrientation('portrait') // jsPDF handling of orientation switch is tricky, usually new doc or kept landscape. 
-            // Let's keep landscape or switch. Ideally switch.
-            // But jsPDF addPage(format, orientation) works in recent versions.
+            // --- PAGE 3+: DETALHES DOS DOCENTES ---
+            doc.addPage()
+            addProfessionalHeader('Detalhamento por Docente', pageWidth)
 
-            // Calculate Totals per Prof
-            const profsWithData = professores.map(prof => {
-                const pAlocs = alocacoes.filter(a => a.docente_id === prof.id)
-                const pAtivs = atividades.filter((a: any) => a.docente_id === prof.id)
-                const chAula = pAlocs.reduce((s, a) => s + (a.ch_alocada || 0), 0)
-                const chAdm = pAtivs.reduce((s: any, a: any) => s + (a.quantidade || 0), 0)
-                return { ...prof, pAlocs, pAtivs, total: chAula + chAdm }
-            }).sort((a, b) => b.total - a.total)
+            let currentY = 32
+            const boxWidth = pageWidth - 28
 
-            let y = 20
-            doc.setFontSize(14)
-            doc.text('DETALHES DOS DOCENTES', 14, 15)
+            profsWithData.forEach((prof) => {
+                const rowCount = Math.max(prof.pAlocs.length, prof.pAtivs.length, 1)
+                const boxHeight = 15 + (rowCount * 6)
 
-            profsWithData.forEach((prof, i) => {
-                if (y > 180) { doc.addPage(); y = 20; }
+                if (currentY + boxHeight > 190) {
+                    doc.addPage()
+                    addProfessionalHeader('Detalhamento por Docente (cont.)', pageWidth)
+                    currentY = 32
+                }
 
-                // Card Header
-                doc.setFillColor(COLORS.HEADER)
-                doc.rect(14, y, 270, 8, 'F') // Landscape width ~297mm
-                doc.setFontSize(10)
-                doc.setTextColor(COLORS.TEXT_MAIN)
-                doc.text(prof.nome.toUpperCase(), 16, y + 6)
+                doc.setDrawColor(220, 220, 220)
+                doc.roundedRect(14, currentY, boxWidth, boxHeight, 2, 2, 'D')
+                doc.setFillColor(248, 249, 250)
+                doc.rect(14.5, currentY + 0.5, boxWidth - 1, 8, 'F')
 
-                // Badge Total
-                doc.setFillColor(COLORS.PRIMARY)
-                doc.roundedRect(250, y + 1, 30, 6, 2, 2, 'F')
-                doc.setTextColor('#FFFFFF')
+                doc.setFont('helvetica', 'bold')
+                doc.setFontSize(9)
+                doc.setTextColor(33, 33, 33)
+                doc.text(prof.nome.toUpperCase(), 18, currentY + 6)
+                doc.text(`TOTAL: ${prof.total}h`, pageWidth - 20, currentY + 6, { align: 'right' })
+
+                doc.setFont('helvetica', 'normal')
                 doc.setFontSize(8)
-                doc.text(`TOTAL: ${prof.total}h`, 255, y + 5)
-
-                y += 10
-
-                // Content
-                doc.setTextColor(COLORS.TEXT_SEC)
-                doc.text('ATIVIDADES:', 16, y)
-                y += 5
+                let itemY = currentY + 13
 
                 prof.pAlocs.forEach((aloc: any) => {
-                    doc.setTextColor(COLORS.TEXT_MAIN)
-                    doc.text(`• ${aloc.disciplina?.nome || 'Disciplina'} (${aloc.ch_alocada}h)`, 20, y)
-                    y += 5
+                    doc.text(`• ${aloc.disciplina?.nome || 'Disciplina'} (${aloc.ch_alocada}h)`, 20, itemY)
+                    itemY += 5
                 })
 
                 prof.pAtivs.forEach((ativ: any) => {
-                    doc.setTextColor(COLORS.TEXT_SEC)
-                    doc.text(`• ${ativ.descricao || ativ.tipos_atividade?.nome} (${ativ.quantidade}h)`, 20, y)
-                    y += 5
+                    doc.text(`• ${ativ.descricao || ativ.tipos_atividade?.nome || 'Atividade'} (${ativ.quantidade}h)`, 20, itemY)
+                    itemY += 5
                 })
 
-                y += 5 // Spacing
+                currentY += boxHeight + 5
             })
 
             // Save

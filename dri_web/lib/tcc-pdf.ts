@@ -504,15 +504,41 @@ export const generateFichaFinal = async (defesa: Defesa) => {
     doc.text('FICHA DE AVALIAÇÃO FINAL DE TCC 2', width / 2, y, { align: 'center' });
     y += 12;
 
-    // Quadro de Informações
+    // Quadro de Informações Dinâmico
     doc.setFontSize(11);
-    doc.rect(marginL, y, contentWidth, 34);
-    doc.text(`Aluno(a): ${defesa.discente.toUpperCase()}`, marginL + 4, y + 6);
-    doc.text(`Título: ${defesa.titulo}`, marginL + 4, y + 12, { maxWidth: contentWidth - 8 });
-    doc.text(`Orientador(a): ${defesa.orientador}`, marginL + 4, y + 20);
-    doc.text(`Membro 1: ${defesa.avaliador2 || ''}`, marginL + 4, y + 26);
-    doc.text(`Membro 2: ${defesa.avaliador3 || ''}`, marginL + 4, y + 32);
-    y += 42;
+    const alunoTxt = `Aluno(a): ${defesa.discente.toUpperCase()}`;
+    const tituloTxt = `Título: ${defesa.titulo}`;
+    const orientadorTxt = `Orientador(a): ${defesa.orientador}`;
+    const membro1Txt = `Membro 1: ${defesa.avaliador2 || ''}`;
+    const membro2Txt = `Membro 2: ${defesa.avaliador3 || ''}`;
+
+    const splitTitulo = doc.splitTextToSize(tituloTxt, contentWidth - 8);
+    const lineGap = 6;
+    const internalPadding = 6;
+
+    // Altura da caixa: padding superior + padding inferior + linhas (aluno + titulo + orientador + m1 + m2)
+    // aluno (1 line) + titulo (n lines) + orientador/m1/m2 (3 lines) = n + 4 lines
+    const totalLinesInside = 1 + splitTitulo.length + 3;
+    const boxHeight = (totalLinesInside * lineGap) + 4; // 4mm de ajuste fino
+
+    doc.rect(marginL, y, contentWidth, boxHeight);
+
+    let currentBoxY = y + internalPadding;
+    doc.text(alunoTxt, marginL + 4, currentBoxY);
+    currentBoxY += lineGap;
+
+    doc.text(splitTitulo, marginL + 4, currentBoxY);
+    currentBoxY += (splitTitulo.length * lineGap);
+
+    doc.text(orientadorTxt, marginL + 4, currentBoxY);
+    currentBoxY += lineGap;
+
+    doc.text(membro1Txt, marginL + 4, currentBoxY);
+    currentBoxY += lineGap;
+
+    doc.text(membro2Txt, marginL + 4, currentBoxY);
+
+    y += boxHeight + 10;
 
     // Lógica de Notas
     const temModoNotaUnica = notas.some(n => n.modo_nota_total === true);

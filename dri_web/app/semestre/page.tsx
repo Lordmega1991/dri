@@ -423,7 +423,7 @@ export default function SemestresPage() {
 
                                 <div className="p-4">
                                     <div className="flex justify-between items-start mb-3">
-                                        <div>
+                                        <Link href={`/semestre/view?id=${sem.id}`} className="block hover:underline decoration-indigo-600 decoration-2 underline-offset-4">
                                             <h3 className="text-2xl font-extrabold text-slate-900 tracking-tight">{sem.ano}.{sem.semestre}</h3>
                                             <div className={clsx(
                                                 "mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide w-fit border",
@@ -435,7 +435,7 @@ export default function SemestresPage() {
                                             )}>
                                                 {sem.status}
                                             </div>
-                                        </div>
+                                        </Link>
                                         <div className={clsx("p-2 rounded-xl", sem.status === 'Finalizado' ? "bg-gray-100 text-gray-400" : "bg-indigo-50 text-indigo-600")}>
                                             <Calendar size={20} />
                                         </div>
@@ -459,7 +459,7 @@ export default function SemestresPage() {
 
                                     {/* Actions */}
                                     <div className="space-y-1.5 border-t border-gray-50 pt-3">
-                                        <Link href={`/semestre/${sem.ano}.${sem.semestre}/grade`} className="flex items-center justify-between p-2 rounded-lg hover:bg-indigo-50 group-hover:bg-indigo-50/50 transition-colors">
+                                        <Link href={`/semestre/grade?id=${sem.id}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-indigo-50 group-hover:bg-indigo-50/50 transition-colors">
                                             <div className="flex items-center text-slate-700 text-xs font-bold">
                                                 <div className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-600 flex items-center justify-center mr-2">
                                                     <Clock size={14} />
@@ -469,7 +469,7 @@ export default function SemestresPage() {
                                             <ArrowLeft size={14} className="rotate-180 text-slate-300 group-hover:text-indigo-400" />
                                         </Link>
 
-                                        <Link href={`/semestre/${sem.ano}.${sem.semestre}/simulacao`} className="flex items-center justify-between p-2 rounded-lg hover:bg-green-50 transition-colors">
+                                        <Link href={`/semestre/simulacao?id=${sem.id}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-green-50 transition-colors">
                                             <div className="flex items-center text-slate-700 text-xs font-bold hover:text-green-800">
                                                 <div className="w-6 h-6 rounded-md bg-green-100 text-green-600 flex items-center justify-center mr-2">
                                                     <BarChart2 size={14} />
@@ -479,15 +479,6 @@ export default function SemestresPage() {
                                             <ArrowLeft size={14} className="rotate-180 text-slate-300" />
                                         </Link>
 
-                                        <Link href={`/semestre/${sem.ano}.${sem.semestre}/relatorios`} className="flex items-center justify-between p-2 rounded-lg hover:bg-orange-50 transition-colors">
-                                            <div className="flex items-center text-slate-700 text-xs font-bold hover:text-orange-800">
-                                                <div className="w-6 h-6 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center mr-2">
-                                                    <FileText size={14} />
-                                                </div>
-                                                Relatórios
-                                            </div>
-                                            <ArrowLeft size={14} className="rotate-180 text-slate-300" />
-                                        </Link>
                                     </div>
                                 </div>
 
