@@ -1,4 +1,4 @@
-'use server'
+// Remote fetch (CORS might block this on client-side export)
 
 export async function fetchSigaaStudents() {
     try {

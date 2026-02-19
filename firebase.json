@@ -1,6 +1,7 @@
 {
   "hosting": {
     "public": "dri_web/out",
+    "cleanUrls": true,
     "ignore": [
       "firebase.json",
       "**/.*",
