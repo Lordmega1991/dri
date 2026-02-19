@@ -12,7 +12,8 @@ import {
     Clock,
     CheckCircle,
     XCircle,
-    LayoutDashboard
+    LayoutDashboard,
+    BookOpen
 } from 'lucide-react'
 import clsx from 'clsx'
 
