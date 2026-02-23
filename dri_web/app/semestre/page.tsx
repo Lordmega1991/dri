@@ -412,7 +412,7 @@ export default function SemestresPage() {
                         {/* Render Active/Planned/Selected Semesters */}
                         {visibleSemestres.map((sem) => (
                             <div key={sem.id} className={clsx(
-                                "bg-white rounded-[1.25rem] border shadow-sm hover:shadow-md transition-all overflow-hidden group hover:-translate-y-0.5 relative",
+                                "bg-white rounded-[1.25rem] border shadow-sm hover:shadow-md transition-all overflow-hidden group hover:-translate-y-1 relative",
                                 sem.status === 'Finalizado' ? "border-gray-200 bg-gray-50/50" : "border-gray-100"
                             )}>
                                 {sem.status === 'Finalizado' && (

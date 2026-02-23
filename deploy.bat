@@ -1,12 +1,12 @@
 @echo off
-echo 🔨 Building Flutter web...
-flutter clean
-flutter pub get
-flutter build web --release --no-wasm-dry-run
+echo 🔨 Building Next.js app...
+cd dri_web
+call npm run build
+cd ..
 
-echo 🚀 Deploying to Firebase...
-firebase deploy
+echo 🚀 Deploying to Firebase (Hosting only)...
+firebase deploy --only hosting
 
 echo ✅ Deploy completed!
-echo 🌐 Your app is live at: https://gp-dri-x.web.app
+echo 🌐 Your app is live at: https://dri-ufpb.web.app
 timeout 10

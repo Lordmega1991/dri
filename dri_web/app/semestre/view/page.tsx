@@ -13,7 +13,8 @@ import {
     CheckCircle,
     XCircle,
     LayoutDashboard,
-    BookOpen
+    BookOpen,
+    ChevronRight
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -156,30 +157,47 @@ function SemestreViewContent() {
                         </div>
                     </div>
 
-                    {/* Navigation Cards */}
-                    <Link href={`/semestre/grade?id=${id}`} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group">
-                        <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
-                            <LayoutDashboard size={20} />
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">Grade de Horários</h3>
-                        <p className="text-sm text-slate-500 leading-relaxed">Gerenciar alocação de disciplinas e horários.</p>
-                    </Link>
+                    {/* Navigation Buttons */}
+                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button
+                            onClick={() => router.push(`/semestre/grade?id=${id}`)}
+                            className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-200 hover:bg-slate-50 active:scale-[0.98] transition-all text-left"
+                        >
+                            <div className="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+                                <LayoutDashboard size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="font-black text-slate-800 uppercase text-[11px] leading-tight">Grade</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">Horários</p>
+                            </div>
+                        </button>
 
-                    <Link href={`/semestre/relatorios?id=${id}`} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group">
-                        <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
-                            <FileText size={20} />
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">Relatórios</h3>
-                        <p className="text-sm text-slate-500 leading-relaxed">Visualizar e baixar PDFs da grade.</p>
-                    </Link>
+                        <button
+                            onClick={() => router.push(`/semestre/relatorios?id=${id}`)}
+                            className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-200 hover:bg-slate-50 active:scale-[0.98] transition-all text-left"
+                        >
+                            <div className="w-10 h-10 rounded-lg bg-purple-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+                                <FileText size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="font-black text-slate-800 uppercase text-[11px] leading-tight">Relatórios</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">PDFs</p>
+                            </div>
+                        </button>
 
-                    <Link href={`/semestre/simulacao?id=${id}`} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all group">
-                        <div className="w-10 h-10 bg-teal-50 rounded-lg flex items-center justify-center text-teal-600 mb-4 group-hover:scale-110 transition-transform">
-                            <BarChart2 size={20} />
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-teal-600 transition-colors">Simulação de CH</h3>
-                        <p className="text-sm text-slate-500 leading-relaxed">Planejamento de carga horária docente.</p>
-                    </Link>
+                        <button
+                            onClick={() => router.push(`/semestre/simulacao?id=${id}`)}
+                            className="flex items-center gap-3 p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-200 hover:bg-slate-50 active:scale-[0.98] transition-all text-left"
+                        >
+                            <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+                                <BarChart2 size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="font-black text-slate-800 uppercase text-[11px] leading-tight">Simulação</h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase">Planejamento</p>
+                            </div>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Disciplines Summary Section */}

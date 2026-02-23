@@ -1,345 +1,208 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabaseClient'
 import {
-  GraduationCap,
-  Calendar,
-  FileText,
+  ArrowUpRight,
   Users,
   LogOut,
-  ChevronRight,
-  ArrowUpRight,
-  Clock,
-  BookOpen,
   AlertCircle,
-  School
+  LayoutDashboard,
+  GraduationCap,
+  BookOpen,
+  ShieldCheck
 } from 'lucide-react'
 import clsx from 'clsx'
+import { useRouter } from 'next/navigation'
 
-// Force reload trigger
-export default function DashboardAppleStyle() {
+export default function Dashboard() {
   const router = useRouter()
-  const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
-  const [date, setDate] = useState('')
-  const [alertInfo, setAlertInfo] = useState<{ count: number, unscheduled: number } | null>(null)
-  const [userAccessLevel, setUserAccessLevel] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [alertInfo, setAlertInfo] = useState<any>(null)
 
   useEffect(() => {
     const checkSessionAndData = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        router.push('/login')
+        window.location.href = '/login'
         return
       }
       setUser(session.user)
 
-      try {
-        // 1. Get Current Semester
-        const now = new Date()
-        const { data: semData } = await supabase
-          .from('semestres')
-          .select('*')
-          .lte('data_inicio', now.toISOString())
-          .gte('data_fim', now.toISOString())
-          .single()
+      const { data: accessData } = await supabase
+        .from('users_access')
+        .select('access_level')
+        .eq('id', session.user.id)
+        .single()
 
-        let currentLabel = ''
-        if (semData) {
-          currentLabel = `${semData.ano}.${semData.semestre}`
-        } else {
-          // Fallback
-          const year = now.getFullYear()
-          const month = now.getMonth() + 1
-          currentLabel = `${year}.${month <= 6 ? 1 : 2}`
+      if (accessData) {
+        const { data: boards } = await supabase
+          .from('tcc_defesas')
+          .select('id')
+          .or(`orientador_id.eq.${session.user.id},coorientador_id.eq.${session.user.id},membro1_id.eq.${session.user.id},membro2_id.eq.${session.user.id},membro3_id.eq.${session.user.id}`)
+          .is('data_finalizada', null)
+
+        if (boards && boards.length > 0) {
+          setAlertInfo({ count: boards.length })
         }
-
-        // 2. Check Defenses for this semester where user participates
-        const { data: defesas, error } = await supabase
-          .from('dados_defesas')
-          .select('id, dia, orientador, coorientador, avaliador1, avaliador2, avaliador3')
-          .eq('semestre', currentLabel)
-
-        if (defesas && defesas.length > 0) {
-          const userName = session.user?.user_metadata?.full_name?.toLowerCase()?.trim() || ''
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-
-          const myDefesas = defesas.filter(d => {
-            const roles = [
-              d.orientador,
-              d.coorientador,
-              d.avaliador1,
-              d.avaliador2,
-              d.avaliador3
-            ].map(r => r?.toLowerCase()?.trim())
-            return roles.includes(userName)
-          })
-
-          // Filtra apenas as bancas "ativas": sem data definida OU com data hoje/futura
-          const activeDefesas = myDefesas.filter(d => {
-            if (!d.dia) return true
-            const defenseDate = new Date(d.dia + 'T12:00:00')
-            defenseDate.setHours(0, 0, 0, 0)
-            return defenseDate >= today
-          })
-
-          if (activeDefesas.length > 0) {
-            const unscheduled = activeDefesas.filter(d => !d.dia).length
-            setAlertInfo({ count: activeDefesas.length, unscheduled })
-          } else {
-            setAlertInfo(null)
-          }
-        } else {
-          setAlertInfo(null)
-        }
-      } catch (err) {
-        console.error('Error fetching alert data:', err)
-      }
-      try {
-        // 3. Get User Access Level
-        const { data: accessData, error: accessError } = await supabase
-          .from('users_access')
-          .select('access_level')
-          .eq('id', session.user.id)
-          .single()
-
-        if (accessData) {
-          setUserAccessLevel(accessData.access_level)
-        } else {
-          setUserAccessLevel(0)
-        }
-
-      } catch (err) {
-        console.error('Error fetching access level:', err)
-        setUserAccessLevel(0)
-      } finally {
         setLoading(false)
       }
     }
-
     checkSessionAndData()
-    setDate(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }))
-  }, [router])
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    router.push('/login')
+    window.location.href = '/login'
+  }
+
+  const navigateTo = (href: string) => () => {
+    window.location.href = href
   }
 
   if (loading) return null
 
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Usuário'
 
-  // --- Components ---
-
-  const BentoCard = ({ href, title, subtitle, icon: Icon, color, size = 'normal', delay }: any) => {
-    const isLarge = size === 'large'
+  const HomeButton = ({ href, title, subtitle, icon: Icon, color }: any) => {
     const colorStyles = {
-      blue: 'from-blue-500 to-blue-600 shadow-blue-200',
-      purple: 'from-purple-500 to-purple-600 shadow-purple-200',
-      emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-200',
-      orange: 'from-orange-500 to-orange-600 shadow-orange-200',
-      dark: 'from-gray-800 to-gray-900 shadow-gray-200'
+      blue: 'bg-blue-600',
+      purple: 'bg-purple-600',
+      emerald: 'bg-emerald-600',
+      orange: 'bg-orange-600',
+      indigo: 'bg-indigo-600',
+      dark: 'bg-slate-900'
     }
 
     return (
-      <Link
-        href={href}
+      <button
+        onClick={navigateTo(href)}
         className={clsx(
-          "group relative overflow-hidden rounded-[1.25rem] p-3.5 transition-all duration-300 hover:scale-[1.01] hover:shadow-lg shadow-sm flex flex-col justify-between",
-          isLarge ? "md:col-span-2 md:row-span-2 min-h-[190px]" : "min-h-[85px]",
-          "bg-white border border-gray-100"
+          "group relative overflow-hidden rounded-[1.25rem] p-6 flex flex-col justify-between text-left transition-all",
+          "bg-white border border-slate-200 shadow-sm active:scale-[0.98] active:bg-slate-50 min-h-[140px]"
         )}
       >
-        {/* Background Gradient Blob */}
         <div className={clsx(
-          "absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-10 bg-gradient-to-br transition-transform group-hover:scale-125",
-          colorStyles[color as keyof typeof colorStyles]
-        )} />
-
-        <div className="relative z-10 flex justify-between items-start">
-          <div className={clsx(
-            "w-8 h-8 rounded-xl flex items-center justify-center text-white bg-gradient-to-br shadow-sm",
-            colorStyles[color as keyof typeof colorStyles]
-          )}>
-            <Icon size={isLarge ? 20 : 16} />
-          </div>
-          <div className={clsx(
-            "w-6 h-6 rounded-full flex items-center justify-center transition-colors",
-            "bg-gray-50 text-gray-400 group-hover:bg-gray-100 group-hover:text-gray-900"
-          )}>
-            <ArrowUpRight size={14} />
-          </div>
+          "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md",
+          colorStyles[color as keyof typeof colorStyles] || 'bg-slate-600'
+        )}>
+          <Icon size={24} />
         </div>
 
-        <div className="relative z-10 mt-2">
-          <h3 className={clsx("font-extrabold text-slate-900 leading-tight tracking-tight", isLarge ? "text-2xl mb-0.5" : "text-sm mb-0")}>
+        <div className="mt-4">
+          <h3 className="font-black text-slate-800 leading-tight uppercase italic text-base">
             {title}
           </h3>
-          <p className={clsx("text-slate-600 font-bold leading-tight", isLarge ? "text-base max-w-xs" : "text-[11px]")}>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">
             {subtitle}
           </p>
         </div>
-      </Link>
+
+        <div className="absolute right-4 top-4 text-slate-200 group-hover:text-indigo-600 transition-colors">
+          <ArrowUpRight size={22} />
+        </div>
+      </button>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-gray-900 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-900">
-
-      {/* Dynamic Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-40">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-100 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-100 blur-[120px]" />
+    <div className="min-h-screen bg-[#F5F5F7] text-gray-900 font-sans antialiased font-medium">
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-30">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-100 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-100 blur-[120px]" />
       </div>
 
-      {/* Navbar (Minimal) */}
-      <nav className="relative z-20 px-4 py-4 md:px-12 flex justify-between items-center max-w-7xl mx-auto">
-        <div className="flex items-center space-x-3">
-          {/* Logo DRI UFPB */}
-          <img
-            src="/logo-dri.png"
-            alt="DRI UFPB"
-            className="w-14 h-14 md:w-16 md:h-16 object-contain"
-          />
-          <span className="font-bold text-lg md:text-xl tracking-tight text-gray-900 leading-tight ml-2">
-            Secretaria Digital <span className="text-indigo-600">DRI UFPB</span>
-          </span>
+      <nav className="relative z-20 px-6 py-4 flex justify-between items-center max-w-7xl mx-auto">
+        <div className="flex items-center gap-3">
+          <img src="/logo-dri.png" alt="DRI UFPB" className="w-12 h-12 object-contain" />
+          <div className="flex flex-col text-left">
+            <span className="font-black text-xl tracking-tighter text-slate-900 uppercase italic leading-none">
+              DRI <span className="text-indigo-600">Digital</span>
+            </span>
+            <span className="text-[8px] font-black uppercase tracking-[2px] text-slate-400">Portal de Gestão</span>
+          </div>
         </div>
 
-        <div className="flex items-center bg-white/60 backdrop-blur-md rounded-full px-3 py-1.5 md:px-4 md:py-2 shadow-sm border border-white/50">
-          <div className="text-xs md:text-sm mr-2 md:mr-4 text-right leading-tight">
-            <span className="text-gray-500 block md:inline md:mr-1">Olá,</span>
-            <span className="font-bold text-gray-800">{firstName}</span>
+        <div className="flex items-center bg-white shadow-sm border border-slate-200 rounded-full px-4 py-2">
+          <div className="text-xs mr-4 text-right">
+            <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Olá, </span>
+            <span className="font-black text-slate-800 block md:inline">{firstName}</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-7 h-7 md:w-8 md:h-8 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-all border border-gray-200 hover:border-red-200"
-            title="Sair"
-          >
-            <LogOut size={14} />
+          <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 transition-colors shrink-0">
+            <LogOut size={18} />
           </button>
         </div>
       </nav>
 
-      <main className="relative z-20 px-4 md:px-12 max-w-7xl mx-auto pb-20 pt-8">
-        <style jsx global>{`
-          @keyframes slow-pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.6; transform: scale(1.05); }
-          }
-          .animate-slow-pulse {
-            animation: slow-pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-          }
-        `}</style>
+      <main className="relative z-20 px-6 max-w-7xl mx-auto py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
-        {/* Bento Grid - Extra Compact */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-          {/* Alerta de Bancas (Dynamic) */}
           {alertInfo && (
-            <Link
-              href="/tcc/minhas-bancas"
-              className="group relative overflow-hidden rounded-[1.25rem] p-3.5 transition-all duration-300 hover:scale-[1.01] hover:shadow-lg shadow-sm flex flex-col justify-between min-h-[85px] bg-white border-2 border-orange-100 md:col-span-2 lg:col-span-3"
+            <button
+              onClick={navigateTo('/tcc/minhas-bancas')}
+              className="md:col-span-2 lg:col-span-3 flex items-center gap-4 p-5 bg-orange-50 border-2 border-orange-100 rounded-2xl shadow-sm hover:bg-orange-100 active:scale-[0.99] transition-all text-left group"
             >
-              <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full opacity-5 bg-orange-500" />
-              <div className="relative z-10 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-orange-400 to-red-500 shadow-md animate-slow-pulse">
-                  <AlertCircle size={24} />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 leading-tight tracking-tight text-base">
-                    Atenção: Bancas em Aberto
-                  </h3>
-                  <p className="text-slate-600 font-bold leading-tight text-xs mt-0.5">
-                    Você está cadastrado em {alertInfo.count} {alertInfo.count === 1 ? 'banca' : 'bancas'} no semestre atual. {alertInfo.unscheduled > 0 ? (
-                      <span className="text-red-500">{alertInfo.unscheduled} ainda não {alertInfo.unscheduled === 1 ? 'possui' : 'possuem'} data definida.</span>
-                    ) : (
-                      <span className="text-emerald-500">Todas já possuem data marcada.</span>
-                    )}
-                  </p>
-                </div>
-                <div className="ml-auto w-8 h-8 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-all">
-                  <ChevronRight size={18} />
-                </div>
+              <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center text-white shrink-0 shadow-lg">
+                <AlertCircle size={26} />
               </div>
-            </Link>
+              <div className="flex-1">
+                <h3 className="font-black text-orange-900 uppercase text-sm italic leading-tight">Bancas em Aberto</h3>
+                <p className="text-[10px] font-bold text-orange-700 uppercase">Você possui {alertInfo.count} defesa(s) pendente(s).</p>
+              </div>
+              <ArrowUpRight size={24} className="text-orange-300 group-hover:text-orange-600" />
+            </button>
           )}
 
-          {/* Semestres - Level 2, 3, 4 */}
-          {(userAccessLevel || 0) >= 2 && (
-            <BentoCard
-              href="/semestre"
-              title="Gestão de Semestres"
-              subtitle="Grades horárias e alocações."
-              icon={Calendar}
-              color="blue"
-            />
-          )}
+          <HomeButton
+            href="/semestre"
+            title="Semestres"
+            subtitle="Grade, CH e Planejamento"
+            icon={BookOpen}
+            color="blue"
+          />
 
-          {/* TCC - Level 0 or 2+ (Hidden for Level 1) */}
-          {((userAccessLevel || 0) === 0 || (userAccessLevel || 0) >= 2) && (
-            <BentoCard
-              href="/tcc"
-              title="Bancas de TCC"
-              subtitle="Agendamentos e atas."
-              icon={GraduationCap}
-              color="purple"
-            />
-          )}
+          <HomeButton
+            href="/tcc"
+            title="TCC"
+            subtitle="Bancas, Docs e Editais"
+            icon={GraduationCap}
+            color="emerald"
+          />
 
-          {/* Secretaria - Level 1, 2, 3, 4 */}
-          {(userAccessLevel || 0) >= 1 && (
-            <BentoCard
-              href="/secretaria"
-              title="Secretaria"
-              subtitle="Documentos e processos."
-              icon={FileText}
-              color="emerald"
-            />
-          )}
+          <HomeButton
+            href="/docentes"
+            title="Docentes"
+            subtitle="Encargos e Atividades"
+            icon={Users}
+            color="purple"
+          />
 
-          {/* Docentes - Level 2, 3, 4 */}
-          {(userAccessLevel || 0) >= 2 && (
-            <BentoCard
-              href="/docentes"
-              title="Docentes"
-              subtitle="Gestão do corpo docente."
-              icon={BookOpen}
-              color="indigo"
-            />
-          )}
+          <HomeButton
+            href="/secretaria"
+            title="Secretaria"
+            subtitle="Seu Espaço e Perfil"
+            icon={LayoutDashboard}
+            color="orange"
+          />
 
-          {/* Usuários - Level 4 only */}
-          {(userAccessLevel || 0) >= 4 && (
-            <BentoCard
-              href="/usuarios"
-              title="Usuários"
-              subtitle="Controle de acesso."
-              icon={Users}
-              color="orange"
-            />
-          )}
-
-          {/* Relatórios - Level 2, 3, 4 */}
-          {(userAccessLevel || 0) >= 2 && (
-            <BentoCard
-              href="/relatorios"
-              title="Relatórios"
-              subtitle="Dados consolidados."
-              icon={BookOpen}
-              color="dark"
-            />
-          )}
-
-
-
+          <HomeButton
+            href="/usuarios"
+            title="Usuários"
+            subtitle="Gestão de Acessos"
+            icon={ShieldCheck}
+            color="indigo"
+          />
         </div>
       </main>
 
+      <footer className="relative z-20 px-6 max-w-7xl mx-auto py-12 border-t border-slate-200 text-center flex flex-col items-center gap-4">
+        <div className="text-[10px] font-black text-slate-300 uppercase tracking-[4px]">
+          UFPB • DRI • v2.3
+        </div>
+        <div className="text-[10px] font-black text-slate-200 uppercase tracking-[2px]">Secretaria Digital</div>
+      </footer>
     </div>
   )
 }

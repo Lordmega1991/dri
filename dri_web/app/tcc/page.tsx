@@ -1,231 +1,174 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import {
-    PlusCircle,
-    Eye,
+    ArrowLeft,
     Calendar,
-    User,
-    ClipboardCheck,
     FileText,
-    Award,
-    ArrowUpRight,
+    Users,
     LogOut,
-    GraduationCap,
-    ArrowLeft
+    ArrowUpRight,
+    ClipboardCheck,
+    User,
+    PlusCircle,
+    Search
 } from 'lucide-react'
 import clsx from 'clsx'
+import { useRouter } from 'next/navigation'
 
 export default function TCCPage() {
-    const router = useRouter()
-    const [userAccessLevel, setUserAccessLevel] = useState<number | null>(null)
-    const [loading, setLoading] = useState(true)
     const [user, setUser] = useState<any>(null)
+    const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         const checkSession = async () => {
             const { data: { session } } = await supabase.auth.getSession()
             if (!session) {
-                router.push('/login')
+                window.location.href = '/login'
                 return
             }
             setUser(session.user)
-
-            // Check Access Level (Needs 2+)
-            const { data: accessData } = await supabase
-                .from('users_access')
-                .select('access_level')
-                .eq('id', session.user.id)
-                .single()
-
-            const level = accessData?.access_level ?? 0
-
-            if (level < 2) {
-                router.push('/') // Redirect unauthorized to home
-                return
-            }
-
-            setUserAccessLevel(level)
             setLoading(false)
         }
         checkSession()
-    }, [router])
+    }, [])
 
     const handleLogout = async () => {
         await supabase.auth.signOut()
-        router.push('/login')
+        window.location.href = '/login'
     }
 
-    const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Usuário'
+    const navigateTo = (href: string) => () => {
+        window.location.href = href
+    }
 
-    // --- Components ---
-
-    const BentoCard = ({ href, title, subtitle, icon: Icon, color, size = 'normal' }: any) => {
-        const isLarge = size === 'large'
+    const TCCButton = ({ href, title, subtitle, icon: Icon, color }: any) => {
         const colorStyles = {
-            blue: 'from-blue-500 to-blue-600 shadow-blue-200',
-            purple: 'from-purple-500 to-purple-600 shadow-purple-200',
-            emerald: 'from-emerald-500 to-emerald-600 shadow-emerald-200',
-            orange: 'from-orange-500 to-orange-600 shadow-orange-200',
-            indigo: 'from-indigo-500 to-indigo-600 shadow-indigo-200',
-            red: 'from-red-500 to-red-600 shadow-red-200',
-            lime: 'from-lime-500 to-lime-600 shadow-lime-200',
-            dark: 'from-gray-800 to-gray-900 shadow-gray-200'
+            blue: 'bg-blue-600',
+            purple: 'bg-purple-600',
+            emerald: 'bg-emerald-600',
+            orange: 'bg-orange-600',
+            indigo: 'bg-indigo-600',
+            red: 'bg-red-600',
+            lime: 'bg-lime-600',
+            dark: 'bg-gray-800'
         }
 
         return (
-            <Link
-                href={href}
-                className={clsx(
-                    "group relative overflow-hidden rounded-[1.25rem] p-3.5 transition-all duration-300 hover:scale-[1.01] hover:shadow-lg shadow-sm flex flex-col justify-between",
-                    isLarge ? "md:col-span-2 md:row-span-2 min-h-[190px]" : "min-h-[85px]",
-                    "bg-white border border-gray-100"
-                )}
+            <button
+                onClick={navigateTo(href)}
+                className="group relative overflow-hidden rounded-[1.25rem] p-5 flex flex-col justify-between text-left transition-all bg-white border border-slate-200 shadow-sm active:scale-[0.98] active:bg-slate-50 min-h-[120px]"
             >
-                {/* Background Gradient Blob */}
                 <div className={clsx(
-                    "absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-10 bg-gradient-to-br transition-transform group-hover:scale-125",
-                    colorStyles[color as keyof typeof colorStyles]
-                )} />
-
-                <div className="relative z-10 flex justify-between items-start">
-                    <div className={clsx(
-                        "w-8 h-8 rounded-xl flex items-center justify-center text-white bg-gradient-to-br shadow-sm",
-                        colorStyles[color as keyof typeof colorStyles]
-                    )}>
-                        <Icon size={isLarge ? 20 : 16} />
-                    </div>
-                    <div className={clsx(
-                        "w-6 h-6 rounded-full flex items-center justify-center transition-colors",
-                        "bg-gray-50 text-gray-400 group-hover:bg-gray-100 group-hover:text-gray-900"
-                    )}>
-                        <ArrowUpRight size={14} />
-                    </div>
+                    "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md",
+                    colorStyles[color as keyof typeof colorStyles] || 'bg-slate-600'
+                )}>
+                    <Icon size={24} />
                 </div>
-
-                <div className="relative z-10 mt-2">
-                    <h3 className={clsx("font-extrabold text-slate-900 leading-tight tracking-tight", isLarge ? "text-2xl mb-0.5" : "text-sm mb-0")}>
+                <div className="mt-4">
+                    <h3 className="font-black text-slate-800 uppercase italic text-sm leading-tight">
                         {title}
                     </h3>
-                    <p className={clsx("text-slate-600 font-bold leading-tight", isLarge ? "text-base max-w-xs" : "text-[11px]")}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
                         {subtitle}
                     </p>
                 </div>
-            </Link>
-        )
-    }
-
-    const bentoItems = [
-        {
-            title: "Minhas Bancas",
-            subtitle: "Onde você atua.",
-            icon: User,
-            color: "lime",
-            href: "/tcc/minhas-bancas"
-        }
-    ]
-
-    // Management items (Level 2+)
-    if ((userAccessLevel || 0) >= 2) {
-        bentoItems.unshift(
-            {
-                title: "Cadastrar Defesa",
-                subtitle: "Nova banca de TCC.",
-                icon: PlusCircle,
-                color: "indigo",
-                href: "/tcc/cadastrar"
-            },
-            {
-                title: "Visualizar Defesas",
-                subtitle: "Consultar e editar bancas.",
-                icon: Eye,
-                color: "blue",
-                href: "/tcc/visualizar"
-            },
-            {
-                title: "Calendário",
-                subtitle: "Agenda completa por data.",
-                icon: Calendar,
-                color: "red",
-                href: "/tcc/calendario"
-            }
-        )
-
-        bentoItems.push(
-            {
-                title: "Documentação das Bancas",
-                subtitle: "Fluxo de aprovação.",
-                icon: ClipboardCheck,
-                color: "emerald",
-                href: "/tcc/situacao"
-            },
-            {
-                title: "Relatórios TCC",
-                subtitle: "Estatísticas da área.",
-                icon: FileText,
-                color: "purple",
-                href: "/tcc/relatorios"
-            }
+                <div className="absolute right-4 top-4 text-slate-200 group-hover:text-indigo-600">
+                    <ArrowUpRight size={20} />
+                </div>
+            </button>
         )
     }
 
     if (loading) return null
 
-    return (
-        <div className="min-h-screen bg-[#F5F5F7] text-gray-900 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-900">
+    const firstName = user?.user_metadata?.full_name?.split(' ')[0] || 'Usuário'
 
-            {/* Dynamic Background */}
-            <div className="fixed inset-0 z-0 pointer-events-none opacity-40">
+    const tccItems = [
+        {
+            title: "Minhas Bancas",
+            subtitle: "Bancas em que atuo",
+            icon: User,
+            color: "lime",
+            href: "/tcc/minhas-bancas"
+        },
+        {
+            title: "Cadastrar Defesa",
+            subtitle: "Novo TCC no sistema",
+            icon: PlusCircle,
+            color: "blue",
+            href: "/tcc/cadastrar"
+        },
+        {
+            title: "Ver Defesas",
+            subtitle: "Lista e busca geral",
+            icon: Search,
+            color: "orange",
+            href: "/tcc/visualizar"
+        },
+        {
+            title: "Calendário TCC",
+            subtitle: "Agenda completa",
+            icon: Calendar,
+            color: "red",
+            href: "/tcc/calendario"
+        },
+        {
+            title: "Documentação",
+            subtitle: "Atas e Situação",
+            icon: ClipboardCheck,
+            color: "emerald",
+            href: "/tcc/situacao"
+        },
+        {
+            title: "Relatórios",
+            subtitle: "Estatísticas da Área",
+            icon: FileText,
+            color: "purple",
+            href: "/tcc/relatorios"
+        }
+    ]
+
+    return (
+        <div className="min-h-screen bg-[#F5F5F7] text-gray-900 font-sans antialiased">
+            <div className="fixed inset-0 z-0 pointer-events-none opacity-30">
                 <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-100 blur-[120px]" />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-100 blur-[120px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-100 blur-[120px]" />
             </div>
 
-            {/* Navbar (Minimal) */}
-            <nav className="relative z-20 px-4 py-4 md:px-12 flex justify-between items-center max-w-7xl mx-auto">
-                <div className="flex items-center space-x-3">
-                    <Link href="/" className="group flex items-center gap-4">
-                        <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl md:rounded-2xl flex items-center justify-center shadow-sm border border-slate-200 text-slate-600 group-hover:text-indigo-600 group-hover:border-indigo-100 group-hover:scale-105 transition-all">
-                            <ArrowLeft size={22} />
-                        </div>
-                        <span className="font-extrabold text-lg md:text-2xl text-slate-900 tracking-tight">
-                            Gerenciamento de <span className="text-indigo-600">Defesas de TCC</span>
-                        </span>
-                    </Link>
-                </div>
-
-                <div className="flex items-center bg-white/60 backdrop-blur-md rounded-full px-3 py-1.5 md:px-4 md:py-2 shadow-sm border border-white/50">
-                    <div className="text-xs md:text-sm mr-2 md:mr-4 text-right leading-tight">
-                        <span className="text-gray-500 block md:inline md:mr-1">Olá,</span>
-                        <span className="font-bold text-gray-800">{firstName}</span>
+            <nav className="relative z-20 px-6 py-4 flex justify-between items-center max-w-7xl mx-auto">
+                <button onClick={navigateTo('/')} className="flex items-center gap-4 group text-left">
+                    <div className="w-10 h-10 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-all shadow-sm">
+                        <ArrowLeft size={20} />
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="w-7 h-7 md:w-8 md:h-8 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-all border border-gray-200 hover:border-red-200"
-                        title="Sair"
-                    >
-                        <LogOut size={14} />
+                    <div className="flex flex-col">
+                        <span className="font-black text-lg tracking-tight text-slate-900 uppercase italic leading-none">
+                            Defesas <span className="text-indigo-600">de TCC</span>
+                        </span>
+                        <span className="text-[8px] font-black uppercase tracking-[2px] text-slate-400">Voltar para Início</span>
+                    </div>
+                </button>
+
+                <div className="flex items-center bg-white shadow-sm border border-slate-200 rounded-full px-4 py-2">
+                    <div className="text-xs mr-4 text-right">
+                        <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Olá, </span>
+                        <span className="font-black text-slate-800 block md:inline">{firstName}</span>
+                    </div>
+                    <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 transition-colors shrink-0">
+                        <LogOut size={18} />
                     </button>
                 </div>
             </nav>
 
-            <main className="relative z-20 px-4 md:px-12 max-w-7xl mx-auto pb-20 pt-8">
-                {/* Bento Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {bentoItems.map((item, index) => (
-                        <BentoCard
-                            key={index}
-                            {...item}
-                        />
+            <main className="relative z-20 px-6 max-w-7xl mx-auto py-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {tccItems.map((item, index) => (
+                        <TCCButton key={index} {...item} />
                     ))}
                 </div>
-
-
-
             </main>
-
         </div>
     )
 }
